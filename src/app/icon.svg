@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="UADEnet Biblioteca">
+  <rect width="32" height="32" rx="7" fill="#1A2B4B"/>
+  <path d="M11 8.5v9a5 5 0 0 0 10 0v-9" fill="none" stroke="#F8F9FA" stroke-width="3.2" stroke-linecap="round"/>
+  <rect x="11" y="24" width="10" height="2" rx="1" fill="#2D5DA1"/>
+</svg>

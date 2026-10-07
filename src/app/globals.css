@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------
+   Identidad visual UADEnet · Biblioteca
+   Tokens extraidos de "Biblioteca UADEnet - Mockups.dc.html"
+   --------------------------------------------------------------- */
+@theme {
+  /* Paleta institucional */
+  --color-institucional: #1a2b4b;
+  --color-secundario: #2d5da1;
+  --color-verde: #127453;
+  --color-rojo: #d32f2f;
+  --color-fondo: #f8f9fa;
+
+  /* Grises y bordes */
+  --color-borde: #e3e6ea;
+  --color-borde-fuerte: #dde2e8;
+  --color-borde-suave: #edf0f3;
+  --color-borde-fino: #f1f3f6;
+  --color-tenue: #5b6673;
+  --color-apagado: #8d97a4;
+  --color-grafito: #3b4a63;
+
+  /* Sidebar */
+  --color-sidebar-texto: #b9c6da;
+  --color-sidebar-label: #8fa6c8;
+  --color-sidebar-borde: #2b3d5f;
+
+  /* Pills de estado */
+  --color-alerta-bg: #fdf3e2;
+  --color-alerta-fg: #8a5a11;
+  --color-ok-bg: #e8f1ec;
+  --color-ok-fg: #0e5c43;
+  --color-error-bg: #fdecec;
+  --color-error-fg: #9f2020;
+  --color-neutro-bg: #eef1f5;
+  --color-aviso-bg: #f5f8fc;
+  --color-aviso-borde: #d8e4f3;
+
+  /* Tipografia */
+  --font-titulo: var(--fuente-caslon), "Libre Caslon Text", Georgia, serif;
+  --font-texto: var(--fuente-hanken), "Hanken Grotesk", system-ui, sans-serif;
+
+  /* Radios del mockup */
+  --radius-tarjeta: 14px;
+  --radius-hero: 16px;
+  --radius-nav: 9px;
+
+  /* Sombra de ventana */
+  --shadow-ventana: 0 20px 50px rgba(16, 24, 40, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-fondo);
+  color: var(--color-institucional);
+  font-family: var(--font-texto);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Titulos y numeros grandes usan la serif del mockup */
+.serif {
+  font-family: var(--font-titulo);
+  letter-spacing: -0.2px;
+}
+
+/* Label en mayusculas de las tarjetas de indicador */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--color-apagado);
+}
+
+/* Lomo de libro con la trama diagonal del mockup */
+.lomo {
+  background: repeating-linear-gradient(
+    135deg,
+    #e9edf3 0 6px,
+    #f3f6f9 6px 12px
+  );
+  border: 1px solid var(--color-borde);
+}
+
+/* Scrollbar discreta en las tablas con overflow */
+.scroll-fino::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.scroll-fino::-webkit-scrollbar-thumb {
+  background: #d5dbe3;
+  border-radius: 999px;
+}
+.scroll-fino::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Foco accesible y consistente en toda la app */
+:focus-visible {
+  outline: 2px solid var(--color-secundario);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
