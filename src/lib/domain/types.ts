@@ -138,7 +138,8 @@ export interface Activity {
   hora: string;
 }
 
-export type MetodoPago = "saldo" | "tarjeta" | "transferencia";
+/** Las multas solo se cobran con debito sobre el saldo institucional. */
+export type MetodoPago = "saldo";
 
 export interface PaymentReceipt {
   /** Nro. de operacion, ej. "OP-77301148". */

@@ -6,20 +6,15 @@ import { Cabecera, Contenido } from "@/components/shell/Cabecera";
 import { BotonNotificaciones } from "@/components/shell/PanelNotificaciones";
 import { Boton, BotonLink } from "@/components/ui/Boton";
 import { Aviso, Card, Dato, Datos } from "@/components/ui/Card";
-import { OpcionRadio } from "@/components/ui/Form";
 import { Mono, SinResultados } from "@/components/ui/Tabla";
 import { mensajeDeError } from "@/lib/api/errors";
-import { METODOS_PAGO, payPenalty } from "@/lib/api/penalties";
+import { METODO_PAGO, payPenalty } from "@/lib/api/penalties";
 import {
   enDias,
   formatFecha,
   formatMonto,
 } from "@/lib/domain/rules";
-import type {
-  MetodoPago,
-  PaymentReceipt,
-  PenaltyView,
-} from "@/lib/domain/types";
+import type { PaymentReceipt, PenaltyView } from "@/lib/domain/types";
 import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
 import { sancionesDe } from "@/lib/store/selectors";
 
@@ -34,16 +29,11 @@ import { sancionesDe } from "@/lib/store/selectors";
    compartirla, no podria mostrar el comprobante.
    --------------------------------------------------------------- */
 
-function nombreMetodo(metodo: MetodoPago): string {
-  return METODOS_PAGO.find((m) => m.id === metodo)?.nombre ?? metodo;
-}
-
 export default function PagoDeSancion() {
   const { id } = useParams<{ id: string }>();
   const db = useDb();
   const usuario = useUsuarioActual();
 
-  const [metodo, setMetodo] = useState<MetodoPago>(METODOS_PAGO[0].id);
   const [comprobante, setComprobante] = useState<PaymentReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -55,7 +45,7 @@ export default function PagoDeSancion() {
     setError(null);
     setEnviando(true);
     try {
-      setComprobante(await payPenalty(sancion.id, metodo));
+      setComprobante(await payPenalty(sancion.id));
     } catch (e) {
       setError(mensajeDeError(e));
     } finally {
@@ -114,8 +104,6 @@ export default function PagoDeSancion() {
         ) : (
           <Formulario
             sancion={sancion}
-            metodo={metodo}
-            onMetodo={setMetodo}
             error={error}
             enviando={enviando}
             onConfirmar={confirmar}
@@ -129,15 +117,11 @@ export default function PagoDeSancion() {
 /** Paso 1 (mockup 10): resumen de la multa y eleccion del medio de pago. */
 function Formulario({
   sancion,
-  metodo,
-  onMetodo,
   error,
   enviando,
   onConfirmar,
 }: {
   sancion: PenaltyView;
-  metodo: MetodoPago;
-  onMetodo: (metodo: MetodoPago) => void;
   error: string | null;
   enviando: boolean;
   onConfirmar: () => void;
@@ -168,22 +152,18 @@ function Formulario({
         </Datos>
       </div>
 
-      <fieldset className="mt-5">
-        <legend className="eyebrow mb-2.5">Medio de pago</legend>
-        <div className="flex flex-col gap-2">
-          {METODOS_PAGO.map((opcion) => (
-            <OpcionRadio
-              key={opcion.id}
-              nombre="metodo-pago"
-              valor={opcion.id}
-              seleccionado={metodo === opcion.id}
-              onChange={(valor) => onMetodo(valor as MetodoPago)}
-              titulo={opcion.nombre}
-              detalle={opcion.detalle}
-            />
-          ))}
+      {/* Las multas solo se cobran contra el saldo institucional, asi que
+          el medio de pago se informa en lugar de elegirse. */}
+      <div className="mt-5">
+        <p className="eyebrow mb-2.5">Medio de pago</p>
+        <div className="rounded-[11px] border border-secundario bg-aviso-bg px-4 py-3.5">
+          <span className="block text-sm font-semibold">{METODO_PAGO.nombre}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-tenue">
+            {METODO_PAGO.detalle} Las multas solo pueden abonarse con el saldo
+            institucional.
+          </span>
         </div>
-      </fieldset>
+      </div>
 
       {error && (
         <div className="mt-4">
@@ -240,7 +220,7 @@ function Comprobante({ comprobante }: { comprobante: PaymentReceipt }) {
             </span>
           </Dato>
           <Dato label="Medio de pago" destacado>
-            {nombreMetodo(comprobante.metodo)}
+            {METODO_PAGO.nombre}
           </Dato>
           <Dato label="Sanción" destacado>
             <Mono>{comprobante.penaltyId}</Mono>

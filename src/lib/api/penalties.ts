@@ -39,34 +39,20 @@ export async function getPenalty(id: string): Promise<PenaltyView> {
   return vistaSancion(db, sancion);
 }
 
-export const METODOS_PAGO: { id: MetodoPago; nombre: string; detalle: string }[] = [
-  {
-    id: "saldo",
-    nombre: "Saldo institucional",
-    detalle: "Se debita de tu cuenta UADEnet al confirmar.",
-  },
-  {
-    id: "tarjeta",
-    nombre: "Tarjeta de crédito o débito",
-    detalle: "Pago en línea a través de la pasarela de la universidad.",
-  },
-  {
-    id: "transferencia",
-    nombre: "Transferencia bancaria",
-    detalle: "Se acredita en 24 a 48 horas hábiles.",
-  },
-];
+/** Unico medio de pago aceptado para las multas de la biblioteca. */
+export const METODO_PAGO: { id: MetodoPago; nombre: string; detalle: string } = {
+  id: "saldo",
+  nombre: "Saldo institucional",
+  detalle: "Se debita de tu cuenta UADEnet al confirmar.",
+};
 
 /**
- * Regulariza una multa.
+ * Regulariza una multa debitando el saldo institucional del alumno.
  *
  * Contra el backend real esto dispara el debito en la wallet del alumno y el
  * evento library.penalty.applied.v1 descritos en el xlsx.
  */
-export async function payPenalty(
-  penaltyId: string,
-  metodo: MetodoPago,
-): Promise<PaymentReceipt> {
+export async function payPenalty(penaltyId: string): Promise<PaymentReceipt> {
   await demora(320);
 
   const db = getDb();
@@ -83,7 +69,7 @@ export async function payPenalty(
     operacion: nuevaOperacion(),
     penaltyId,
     monto: sancion.monto,
-    metodo,
+    metodo: METODO_PAGO.id,
     fecha: HOY,
   };
 

@@ -107,7 +107,7 @@ documentados en `UADEnet_Biblioteca_Grupo3.xlsx`:
 | `createLoan(isbn, sede, userId)` | `POST /api/v1/library/loans` |
 | `renewLoan(id)` | `POST /api/v1/library/loans/{id}/renew` |
 | `returnLoan(id)` | `POST /api/v1/library/loans/{id}/return` |
-| `payPenalty(id, metodo)` | `POST /internal/v1/wallets/{userId}/debits` |
+| `payPenalty(id)` | `POST /internal/v1/wallets/{userId}/debits` |
 
 Migrar al backend real es cambiar el cuerpo de esas funciones por un `fetch`.
 Ninguna pantalla toca el store directamente para escribir, así que las vistas no

@@ -87,6 +87,11 @@ function notificar(): void {
   oyentes.forEach((oyente) => oyente());
 }
 
+function sumarFaltantes<T extends { id: string }>(guardados: T[], semilla: T[]): T[] {
+  const ids = new Set(guardados.map((r) => r.id));
+  return [...guardados, ...semilla.filter((r) => !ids.has(r.id))];
+}
+
 /**
  * Carga lo guardado en localStorage. Se llama una sola vez desde el
  * provider, ya en el cliente, para no romper la hidratacion.
@@ -99,7 +104,16 @@ export function hidratar(): void {
     if (guardado) {
       const parseado = JSON.parse(guardado) as Partial<Db>;
       // Mezclamos sobre la semilla para tolerar datos de versiones viejas.
-      db = { ...semillaFresca(), ...parseado };
+      const semilla = semillaFresca();
+      db = { ...semilla, ...parseado };
+      // Los registros que se agregaron al seed despues de guardar la demo
+      // se suman a lo guardado; los que ya existen no se pisan.
+      db.prestamos = sumarFaltantes(db.prestamos, semilla.prestamos);
+      db.sanciones = sumarFaltantes(db.sanciones, semilla.sanciones);
+      db.notificaciones = sumarFaltantes(
+        db.notificaciones,
+        semilla.notificaciones,
+      );
     }
   } catch {
     db = semillaFresca();

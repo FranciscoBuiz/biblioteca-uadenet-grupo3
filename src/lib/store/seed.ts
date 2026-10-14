@@ -265,6 +265,19 @@ export const EJEMPLARES: Copy[] = [
 
 export const PRESTAMOS: Loan[] = [
   {
+    id: "PRE-0993",
+    isbn: "9788478290745",
+    copia: "BA-030",
+    userId: "u-ana",
+    sede: "monserrat",
+    fechaPrestamo: "2026-06-20",
+    fechaLimite: "2026-07-04",
+    fechaDevolucion: "2026-07-14",
+    renovaciones: 0,
+    codigoRetiro: "RET-118205",
+    tieneReservas: false,
+  },
+  {
     id: "PRE-0994",
     isbn: "9780134757599",
     copia: "BA-011",
@@ -385,6 +398,18 @@ export const PRESTAMOS: Loan[] = [
 
 export const SANCIONES: Penalty[] = [
   {
+    id: "SAN-00028",
+    loanId: "PRE-0993",
+    userId: "u-ana",
+    isbn: "9788478290745",
+    monto: 2500,
+    diasAtraso: 10,
+    fechaLimiteOriginal: "2026-07-04",
+    fechaDeteccion: "2026-07-14",
+    fechaCobro: null,
+    estado: "pendiente",
+  },
+  {
     id: "SAN-00029",
     loanId: "PRE-0994",
     userId: "u-camila",
@@ -481,6 +506,16 @@ export const NOTIFICACIONES: Notification[] = [
       "Recibimos Don't Make Me Think en sede Monserrat. El préstamo PRE-1005 quedó cerrado.",
     fecha: "2026-07-29",
     leida: true,
+  },
+  {
+    id: "NOT-000",
+    userId: "u-ana",
+    tipo: "sancion",
+    titulo: "Nueva sanción aplicada",
+    cuerpo:
+      "Se aplicó una multa de $2.500 por la devolución tardía del libro Ingeniería de Software.",
+    fecha: "2026-07-14",
+    leida: false,
   },
   {
     id: "NOT-010",

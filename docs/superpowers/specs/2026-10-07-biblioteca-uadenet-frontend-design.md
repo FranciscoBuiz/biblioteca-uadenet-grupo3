@@ -89,7 +89,7 @@ Notification { id, userId, tipo: 'sancion'|'vencimiento'|'comprobante',
 | `createLoan(isbn, sede)` | `POST /api/v1/library/loans` |
 | `renewLoan(loanId)` | `POST /api/v1/library/loans/{id}/renew` |
 | `returnLoan(loanId)` | `POST /api/v1/library/loans/{id}/return` |
-| `payPenalty(penaltyId, metodo)` | `POST /internal/v1/wallets/{userId}/debits` |
+| `payPenalty(penaltyId)` | `POST /internal/v1/wallets/{userId}/debits` |
 
 Migrar al backend real = reemplazar el cuerpo por `fetch`; las vistas no cambian.
 
