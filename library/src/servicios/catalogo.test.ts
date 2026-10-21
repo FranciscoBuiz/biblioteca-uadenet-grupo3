@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { crearRepositorioEnMemoria } from "../datos/memoria.js";
-import { crearLibro, listarLibros, type AltaLibro } from "./catalogo.js";
+import { CoreFalso, CoreNoDisponible } from "../integracion/core.js";
+import { activarLibro, crearLibro, editarLibro, listarLibros, type AltaLibro } from "./catalogo.js";
 import { listarNotificaciones, marcarLeida } from "./notificaciones.js";
 import { actividadReciente } from "./panel.js";
 
@@ -49,4 +50,37 @@ test("marcarLeida de una notificación de otro usuario → 404 NOT_FOUND", async
   await assert.rejects(marcarLeida(repo, "u-otro", propia.id), rechazo("NOT_FOUND", 404));
   assert.equal((await marcarLeida(repo, "u-ana", propia.id)).leida, true);
   assert.equal((await listarNotificaciones(repo, "u-ana", "sin_leer")).some((n) => n.id === propia.id), false);
+});
+
+test("crearLibro con cantidad 0 → 400 INVALID_QUANTITY", async () => {
+  const repo = crearRepositorioEnMemoria(HOY);
+  await assert.rejects(crearLibro(repo, { ...alta, cantidad: 0 }, HOY), rechazo("INVALID_QUANTITY", 400));
+});
+
+test("editarLibro ignora las claves isbn y activo", async () => {
+  const repo = crearRepositorioEnMemoria(HOY);
+  await crearLibro(repo, alta, HOY);
+  const cambios = { titulo: " Otro ", isbn: "0000000000", activo: false } as never;
+  const libro = await editarLibro(repo, alta.isbn, cambios);
+  assert.equal(libro.titulo, "Otro");
+  assert.equal(libro.isbn, alta.isbn);
+  assert.equal(libro.activo, true);
+  assert.equal((await repo.libro("0000000000")), undefined);
+});
+
+test("activarLibro(false) con ejemplares prestados → 409 COPIES_ON_LOAN", async () => {
+  const repo = crearRepositorioEnMemoria(HOY);
+  await assert.rejects(activarLibro(repo, "9780132350884", false), rechazo("COPIES_ON_LOAN", 409));
+});
+
+test("CoreFalso: debitar es idempotente y caido lanza CoreNoDisponible", async () => {
+  const core = new CoreFalso();
+  core.saldos.set("u-ana", 5000);
+  const a = await core.debitar("u-ana", 2500, "SAN-1", "c");
+  const b = await core.debitar("u-ana", 2500, "SAN-1", "c");
+  assert.equal(a.operacion, b.operacion);
+  assert.equal(core.saldos.get("u-ana"), 2500);
+  assert.deepEqual(core.debitos, ["penalty/SAN-1"]);
+  core.caido = true;
+  await assert.rejects(core.lectores([], "c"), CoreNoDisponible);
 });

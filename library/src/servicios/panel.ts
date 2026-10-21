@@ -1,6 +1,6 @@
 import type { Repositorio } from "../datos/repositorio.js";
 import { diasAtraso } from "../dominio/reglas.js";
-import type { Activity, EstadoEjemplar, FechaISO, SedeId, TipoActividad } from "../dominio/tipos.js";
+import type { Activity, EstadoEjemplar, FechaISO, SedeId } from "../dominio/tipos.js";
 
 export interface Indicadores {
   titulos: number;
@@ -10,25 +10,6 @@ export interface Indicadores {
   reservados: number;
   mantenimiento: number;
   vencidos: number;
-}
-
-/** Id unico y legible para registros creados en runtime. */
-export function nuevoId(prefijo: string): string {
-  return `${prefijo}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-}
-
-function horaActual(): string {
-  const ahora = new Date();
-  return `${String(ahora.getHours()).padStart(2, "0")}:${String(ahora.getMinutes()).padStart(2, "0")}`;
-}
-
-export async function registrarActividad(
-  repo: Repositorio,
-  tipo: TipoActividad,
-  texto: string,
-  hoy: FechaISO,
-): Promise<void> {
-  await repo.registrarActividad({ id: nuevoId("ACT"), tipo, texto, fecha: hoy, hora: horaActual() });
 }
 
 export async function indicadores(
@@ -52,9 +33,9 @@ export async function indicadores(
   };
 }
 
-/** Mas recientes primero. */
+/** Mas recientes primero; desempata por id. */
 export async function actividadReciente(repo: Repositorio): Promise<Activity[]> {
   return (await repo.actividad()).sort(
-    (a, b) => b.fecha.localeCompare(a.fecha) || b.hora.localeCompare(a.hora),
+    (a, b) => b.fecha.localeCompare(a.fecha) || b.hora.localeCompare(a.hora) || b.id.localeCompare(a.id),
   );
 }

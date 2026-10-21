@@ -1,7 +1,7 @@
 import type { Repositorio } from "../datos/repositorio.js";
 import type { FechaISO, Notification, TipoNotificacion } from "../dominio/tipos.js";
 import { ErrorNegocio } from "./errores.js";
-import { nuevoId } from "./panel.js";
+import { nuevoId } from "./comun.js";
 
 export type FiltroNotificaciones = "todas" | "sin_leer" | "vencimientos" | "sanciones";
 
@@ -11,7 +11,7 @@ export async function listarNotificaciones(
   userId: string,
   filtro: FiltroNotificaciones = "todas",
 ): Promise<Notification[]> {
-  const todas = (await repo.notificaciones(userId)).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const todas = (await repo.notificaciones(userId)).sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id.localeCompare(a.id));
   if (filtro === "sin_leer") return todas.filter((n) => !n.leida);
   if (filtro === "vencimientos") return todas.filter((n) => n.tipo === "vencimiento");
   if (filtro === "sanciones") return todas.filter((n) => n.tipo === "sancion");

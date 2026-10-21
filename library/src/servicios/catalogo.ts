@@ -10,7 +10,7 @@ import type {
   SedeId,
 } from "../dominio/tipos.js";
 import { ErrorNegocio } from "./errores.js";
-import { registrarActividad } from "./panel.js";
+import { registrarActividad } from "./comun.js";
 
 export interface FiltroCatalogo {
   /** Texto libre: busca en titulo, autor e ISBN. */
@@ -52,6 +52,12 @@ function conStock(libro: Book, ejemplares: Copy[]): BookWithStock {
 }
 
 const noHayLibro = () => new ErrorNegocio("NOT_FOUND", "No encontramos ese título.", 404);
+
+function validarCantidad(cantidad: number): void {
+  if (!Number.isInteger(cantidad) || cantidad < 1) {
+    throw new ErrorNegocio("INVALID_QUANTITY", "La cantidad debe ser mayor a cero.");
+  }
+}
 
 const textoEjemplares = (n: number) => `${n} ${n === 1 ? "ejemplar" : "ejemplares"}`;
 
@@ -103,6 +109,7 @@ function generarEjemplares(existentes: Copy[], isbn: string, sede: SedeId, canti
 export async function crearLibro(repo: Repositorio, datos: AltaLibro, hoy: FechaISO): Promise<Book> {
   const errorIsbn = validarIsbn(datos.isbn);
   if (errorIsbn) throw new ErrorNegocio("INVALID_ISBN", errorIsbn);
+  validarCantidad(datos.cantidad);
   const isbn = datos.isbn.replace(/[\s-]/g, "");
 
   return repo.transaccion(async (r) => {
@@ -139,10 +146,17 @@ export async function editarLibro(
   return repo.transaccion(async (r) => {
     const existente = await r.libro(isbn);
     if (!existente) throw noHayLibro();
-    const actualizado: Book = { ...existente, ...cambios };
-    for (const campo of ["titulo", "autor", "editorial", "descripcion"] as const) {
-      actualizado[campo] = actualizado[campo].trim();
-    }
+    // solo campos editables, explicitos: isbn y activo de "cambios" se ignoran
+    const { titulo, autor, editorial, anio, categoria, descripcion } = { ...existente, ...cambios };
+    const actualizado: Book = {
+      ...existente,
+      titulo: titulo.trim(),
+      autor: autor.trim(),
+      editorial: editorial.trim(),
+      anio,
+      categoria,
+      descripcion: descripcion.trim(),
+    };
     await r.guardarLibro(actualizado);
     return actualizado;
   });
@@ -184,9 +198,7 @@ export async function agregarEjemplares(
   return repo.transaccion(async (r) => {
     const libro = await r.libro(isbn);
     if (!libro) throw noHayLibro();
-    if (!Number.isInteger(cantidad) || cantidad < 1) {
-      throw new ErrorNegocio("INVALID_QUANTITY", "La cantidad debe ser mayor a cero.");
-    }
+    validarCantidad(cantidad);
     const nuevos = generarEjemplares(await r.ejemplares(), isbn, sede, cantidad);
     await r.guardarEjemplares(nuevos);
     await registrarActividad(
