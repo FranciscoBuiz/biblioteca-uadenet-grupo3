@@ -103,6 +103,17 @@ export function diasEntre(desde: FechaISO, hasta: FechaISO): number {
   return Math.round((parseFecha(hasta).getTime() - parseFecha(desde).getTime()) / MS_DIA);
 }
 
+/** Muestra una fecha ISO como dd/mm/aaaa. */
+export function formatFecha(iso: FechaISO): string {
+  const [anio, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${anio}`;
+}
+
+/** Formatea importes: 2500 -> "$2.500". */
+export function formatMonto(monto: number): string {
+  return `$${monto.toLocaleString("es-AR")}`;
+}
+
 /* --- Estados de prestamo -------------------------------------- */
 
 /** Fecha limite de un prestamo solicitado en `fechaPrestamo`. */
