@@ -120,7 +120,7 @@ test("gateway devuelve tal cual el status y body de la biblioteca (409)", async 
 test("gateway rechaza rutas con '..' o separadores codificados: 400 y la biblioteca no se toca", async () => {
   const t = await tokenDe("ana.garcia@uade.edu.ar");
   const antes = golpes;
-  for (const ruta of ["/api/v1/library/../../docs", "/api/v1/library/%2e%2e/x", "/api/v1/library/a%2fb", "/api/v1/library/%2E%2E%2Fdocs"]) {
+  for (const ruta of ["/api/v1/library/../../docs", "/api/v1/library/%2e%2e/x", "/api/v1/library/a%2fb", "/api/v1/library/%2E%2E%2Fdocs", "/api/v1/library/books/..\\loans", "/api/v1/library/books\\x"]) {
     // http.get no normaliza la ruta (fetch si, y ocultaria el "..").
     const r = await new Promise<{ status: number; body: string }>((ok, ko) => {
       http.get({ host: "127.0.0.1", port: (core.address() as AddressInfo).port, path: ruta, headers: { authorization: `Bearer ${t}` } }, (res) => {

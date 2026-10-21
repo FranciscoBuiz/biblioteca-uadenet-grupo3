@@ -29,7 +29,7 @@ export const gateway = (o: OpcionesGateway): RequestHandler[] => [
     const base = new URL(o.libraryUrl);
     const destino = new URL(req.originalUrl, base);
     // fetch normaliza los ".."; se rechaza el camino crudo antes para que no llegue a otra ruta con la clave del Gateway.
-    if (/(^|\/)\.\.?(\/|$)|%2e|%2f|%5c/i.test(ruta) || destino.origin !== base.origin
+    if (/(^|\/)\.\.?(\/|$)|%2e|%2f|%5c|\\/i.test(ruta) || destino.origin !== base.origin
       || !(destino.pathname === "/api/v1/library" || destino.pathname.startsWith("/api/v1/library/"))) {
       res.status(400).json({ code: "INVALID_PATH", message: "Ruta inválida." });
       return;

@@ -71,7 +71,7 @@ export function crearApp(deps: DepsCore): express.Express {
 
   app.use(((err, _req, res, _next) => {
     if (err?.status && err?.code) res.status(err.status).json({ code: err.code, message: err.message });
-    else if (err?.type === "entity.parse.failed" || (err?.status >= 400 && err?.status < 500)) res.status(err.status ?? 400).json({ code: "VALIDATION_ERROR", message: "El cuerpo de la solicitud no es un JSON válido." });
+    else if (err?.type === "entity.parse.failed" || (err?.status >= 400 && err?.status < 500)) res.status(err.status ?? 400).json({ code: "VALIDATION_ERROR", message: err.status === 413 ? "El cuerpo de la solicitud es demasiado grande." : err.status === 415 ? "Tipo de contenido no soportado." : "El cuerpo de la solicitud no es un JSON válido." });
     else { log(`[core] ERROR ${err?.stack ?? err}`); res.status(500).json({ code: "INTERNAL_ERROR", message: "Ocurrió un error inesperado. Intentá de nuevo." }); }
   }) as express.ErrorRequestHandler);
   return app;
