@@ -1,8 +1,7 @@
 /* ---------------------------------------------------------------
    Modelo de dominio del modulo Biblioteca.
-   Las formas replican los contratos del CORE Gateway documentados
-   en UADEnet_Biblioteca_Grupo3.xlsx para que el dia que exista el
-   backend real solo haya que cambiar el cuerpo de lib/api/*.
+   Las formas internas de la Biblioteca; el contrato publico con el
+   resto del sistema es el JSON de la API (ver library/src/http).
    --------------------------------------------------------------- */
 
 /** Fecha en formato ISO corto: "2026-08-26". */

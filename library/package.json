@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=22" },
   "description": "Modulo Biblioteca del sistema universitario UADEnet",
   "scripts": {
     "dev": "tsx watch src/server.ts",

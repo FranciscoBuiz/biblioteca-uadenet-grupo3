@@ -9,7 +9,16 @@ import type {
   Tarifa,
 } from "../dominio/tipos.js";
 
-/** Acceso a datos de la Biblioteca. Todo es asincrono: la implementacion real es MariaDB. */
+/**
+ * Acceso a datos de la Biblioteca. Todo es asincrono: la implementacion real es MariaDB.
+ * - El orden de las listas NO esta especificado: los servicios ordenan explicitamente.
+ * - `guardarX` hace upsert por clave primaria.
+ * - `agregarTarifa` hace upsert por `vigenteDesde`: una tarifa del mismo dia pisa la anterior.
+ * - `siguienteId` devuelve ids estrictamente crecientes; puede haber huecos (una secuencia
+ *   SQL no se revierte con el rollback).
+ * - Dentro de `transaccion` se usa solo el `repo` que recibe el callback; no se soportan
+ *   transacciones anidadas.
+ */
 export interface Repositorio {
   libros(): Promise<Book[]>;
   libro(isbn: string): Promise<Book | undefined>;
