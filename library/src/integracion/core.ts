@@ -5,7 +5,7 @@ export interface EventoSancion {
   eventType: "library.penalty.applied.v1";
   source: "library";
   subject: string; // "user/{userId}"
-  data: { userId: string; loanId: string; daysLate: number; amount: number; currency: string };
+  data: { userId: string; loanId: string; daysLate: number; amount: string; currency: string };
 }
 
 export interface PuertoCore {
