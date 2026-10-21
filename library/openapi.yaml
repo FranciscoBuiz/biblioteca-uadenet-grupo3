@@ -1,0 +1,467 @@
+openapi: 3.0.3
+info:
+  title: UADEnet Biblioteca API
+  version: 1.0.0
+  description: >
+    Modulo Biblioteca. Se accede a traves del Gateway, que agrega X-Gateway-Key, X-User-Id,
+    X-User-Roles (student | librarian), X-User-Permissions y X-Correlation-Id.
+    Las fechas son segundos Unix (medianoche local si no tienen hora).
+servers:
+  - url: /api/v1/library
+security:
+  - gatewayKey: []
+    userId: []
+    userRoles: []
+components:
+  securitySchemes:
+    gatewayKey: { type: apiKey, in: header, name: X-Gateway-Key }
+    userId: { type: apiKey, in: header, name: X-User-Id }
+    userRoles: { type: apiKey, in: header, name: X-User-Roles }
+  parameters:
+    isbn: { name: isbn, in: path, required: true, schema: { type: string } }
+    id: { name: id, in: path, required: true, schema: { type: string } }
+    siteIdQuery: { name: siteId, in: query, schema: { $ref: '#/components/schemas/SiteId' } }
+    q: { name: q, in: query, schema: { type: string } }
+  responses:
+    Error:
+      description: Error de negocio, validacion o autorizacion
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: NOT_FOUND }
+        message: { type: string }
+    SiteId: { type: string, enum: [monserrat, belgrano, pinamar] }
+    Category:
+      type: string
+      enum: [Programación, Arquitectura, Bases de datos, Sistemas, UX, Redes, Algoritmos]
+    Unix: { type: integer, description: Segundos Unix }
+    Book:
+      type: object
+      properties:
+        isbn: { type: string }
+        title: { type: string }
+        author: { type: string }
+        publisher: { type: string }
+        year: { type: integer }
+        category: { $ref: '#/components/schemas/Category' }
+        description: { type: string }
+        active: { type: boolean }
+    BookWithStock:
+      allOf:
+        - $ref: '#/components/schemas/Book'
+        - type: object
+          properties:
+            stock:
+              type: object
+              properties:
+                total: { type: integer }
+                available: { type: integer }
+                loaned: { type: integer }
+                bySite:
+                  type: object
+                  properties:
+                    monserrat: { type: integer }
+                    belgrano: { type: integer }
+                    pinamar: { type: integer }
+    BookInput:
+      type: object
+      required: [title, author, publisher, year, category, description]
+      properties:
+        title: { type: string }
+        author: { type: string }
+        publisher: { type: string }
+        year: { type: integer }
+        category: { $ref: '#/components/schemas/Category' }
+        description: { type: string }
+    BookCreate:
+      allOf:
+        - $ref: '#/components/schemas/BookInput'
+        - type: object
+          required: [isbn, siteId, quantity]
+          properties:
+            isbn: { type: string }
+            siteId: { $ref: '#/components/schemas/SiteId' }
+            quantity: { type: integer, minimum: 1 }
+    Copy:
+      type: object
+      properties:
+        code: { type: string }
+        isbn: { type: string }
+        siteId: { $ref: '#/components/schemas/SiteId' }
+        status: { type: string, enum: [available, loaned, reserved, maintenance, retired] }
+    Reader:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        studentId: { type: string }
+        nationalId: { type: string }
+        role: { type: string, enum: [student, librarian] }
+        defaultSiteId: { $ref: '#/components/schemas/SiteId' }
+        initials: { type: string }
+        label: { type: string }
+    Site:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/SiteId' }
+        name: { type: string }
+        city: { type: string }
+        address: { type: string, nullable: true }
+    Location:
+      type: object
+      properties:
+        locationId: { type: string }
+        siteId: { $ref: '#/components/schemas/SiteId' }
+        name: { type: string }
+        capacity: { type: integer }
+        status: { type: string }
+    Loan:
+      type: object
+      properties:
+        id: { type: string, example: PRE-1003 }
+        isbn: { type: string }
+        copyCode: { type: string }
+        userId: { type: string }
+        siteId: { $ref: '#/components/schemas/SiteId' }
+        loanedAt: { $ref: '#/components/schemas/Unix' }
+        dueAt: { $ref: '#/components/schemas/Unix' }
+        returnedAt: { allOf: [{ $ref: '#/components/schemas/Unix' }], nullable: true }
+        renewals: { type: integer }
+        pickupCode: { type: string }
+        hasReservations: { type: boolean }
+    LoanView:
+      allOf:
+        - $ref: '#/components/schemas/Loan'
+        - type: object
+          properties:
+            status: { type: string, enum: [active, dueSoon, overdue, penalized, returned] }
+            daysLeft: { type: integer }
+            daysLate: { type: integer }
+            book: { $ref: '#/components/schemas/Book' }
+            student: { $ref: '#/components/schemas/Reader' }
+            penalty: { allOf: [{ $ref: '#/components/schemas/Penalty' }], nullable: true }
+    Penalty:
+      type: object
+      properties:
+        id: { type: string, example: SAN-00031 }
+        loanId: { type: string }
+        userId: { type: string }
+        isbn: { type: string }
+        amount: { type: number }
+        currency: { type: string, enum: [ARS] }
+        daysLate: { type: integer }
+        originalDueAt: { $ref: '#/components/schemas/Unix' }
+        detectedAt: { $ref: '#/components/schemas/Unix' }
+        paidAt: { allOf: [{ $ref: '#/components/schemas/Unix' }], nullable: true }
+        status: { type: string, enum: [pending, paid] }
+    PenaltyView:
+      allOf:
+        - $ref: '#/components/schemas/Penalty'
+        - type: object
+          properties:
+            book: { $ref: '#/components/schemas/Book' }
+            student: { $ref: '#/components/schemas/Reader' }
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [penalty, dueDate, receipt] }
+        title: { type: string }
+        body: { type: string }
+        createdAt: { $ref: '#/components/schemas/Unix' }
+        read: { type: boolean }
+    Activity:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [return, loan, penalty, copyAdded] }
+        text: { type: string }
+        createdAt: { $ref: '#/components/schemas/Unix' }
+    PaymentReceipt:
+      type: object
+      properties:
+        operationId: { type: string }
+        penaltyId: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        method: { type: string, enum: [institutionalBalance] }
+        paidAt: { $ref: '#/components/schemas/Unix' }
+    Indicators:
+      type: object
+      properties:
+        titles: { type: integer }
+        copies: { type: integer }
+        available: { type: integer }
+        loaned: { type: integer }
+        reserved: { type: integer }
+        maintenance: { type: integer }
+        overdue: { type: integer }
+paths:
+  /books:
+    get:
+      summary: Catalogo con stock (estudiante, bibliotecario)
+      parameters:
+        - $ref: '#/components/parameters/q'
+        - $ref: '#/components/parameters/siteIdQuery'
+        - { name: category, in: query, schema: { type: string } }
+        - { name: inStock, in: query, schema: { type: boolean } }
+        - { name: includeInactive, in: query, schema: { type: boolean } }
+        - { name: sort, in: query, schema: { type: string, enum: [recent, title, availability] } }
+      responses:
+        '200':
+          description: Libros
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/BookWithStock' } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      summary: Alta de titulo con ejemplares (bibliotecario)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BookCreate' } } }
+      responses:
+        '201':
+          description: Titulo creado
+          content: { application/json: { schema: { $ref: '#/components/schemas/BookWithStock' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /books/{isbn}:
+    parameters: [{ $ref: '#/components/parameters/isbn' }]
+    get:
+      summary: Detalle de un titulo (estudiante, bibliotecario)
+      responses:
+        '200':
+          description: Libro
+          content: { application/json: { schema: { $ref: '#/components/schemas/BookWithStock' } } }
+        default: { $ref: '#/components/responses/Error' }
+    put:
+      summary: Editar un titulo (bibliotecario)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BookInput' } } }
+      responses:
+        '200':
+          description: Libro actualizado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Book' } } }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      summary: Baja logica o reactivacion (bibliotecario)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [active], properties: { active: { type: boolean } } }
+      responses:
+        '200':
+          description: Libro actualizado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Book' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /books/{isbn}/copies:
+    parameters: [{ $ref: '#/components/parameters/isbn' }]
+    get:
+      summary: Ejemplares de un titulo (bibliotecario)
+      responses:
+        '200':
+          description: Ejemplares
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Copy' } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      summary: Agregar ejemplares (bibliotecario)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [siteId, quantity]
+              properties:
+                siteId: { $ref: '#/components/schemas/SiteId' }
+                quantity: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Ejemplares creados
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Copy' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /books/{isbn}/copies/{code}:
+    parameters:
+      - $ref: '#/components/parameters/isbn'
+      - { name: code, in: path, required: true, schema: { type: string } }
+    patch:
+      summary: Cambiar el estado de un ejemplar (bibliotecario)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties: { status: { type: string, enum: [available, maintenance, retired] } }
+      responses:
+        '200':
+          description: Ejemplar actualizado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Copy' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /categories:
+    get:
+      summary: Categorias del catalogo activo
+      responses:
+        '200':
+          description: Categorias
+          content: { application/json: { schema: { type: array, items: { type: string } } } }
+  /sites:
+    get:
+      summary: Sedes
+      responses:
+        '200':
+          description: Sedes
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Site' } } } }
+  /locations:
+    get:
+      summary: Ubicaciones (sincronizadas desde el Backoffice)
+      responses:
+        '200':
+          description: Ubicaciones
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Location' } } } }
+  /loans:
+    get:
+      summary: Prestamos (el estudiante ve solo los propios)
+      parameters:
+        - $ref: '#/components/parameters/q'
+        - $ref: '#/components/parameters/siteIdQuery'
+        - { name: status, in: query, schema: { type: string, enum: [active, overdue, returned, all] } }
+      responses:
+        '200':
+          description: Prestamos
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/LoanView' } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      summary: Solicitar un prestamo (estudiante)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [isbn, siteId]
+              properties:
+                isbn: { type: string }
+                siteId: { $ref: '#/components/schemas/SiteId' }
+      responses:
+        '201':
+          description: Prestamo creado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Loan' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /loans/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      summary: Detalle de un prestamo (404 si es de otro estudiante)
+      responses:
+        '200':
+          description: Prestamo
+          content: { application/json: { schema: { $ref: '#/components/schemas/LoanView' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /loans/{id}/renew:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      summary: Renovar un prestamo propio (estudiante)
+      responses:
+        '200':
+          description: Prestamo renovado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Loan' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /loans/{id}/return:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      summary: Registrar la devolucion (bibliotecario)
+      responses:
+        '200':
+          description: Prestamo devuelto y sancion generada, si corresponde
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  loan: { $ref: '#/components/schemas/Loan' }
+                  penalty: { allOf: [{ $ref: '#/components/schemas/Penalty' }], nullable: true }
+        default: { $ref: '#/components/responses/Error' }
+  /penalties:
+    get:
+      summary: Sanciones (el estudiante ve solo las propias)
+      parameters:
+        - $ref: '#/components/parameters/q'
+        - { name: status, in: query, schema: { type: string, enum: [all, paid, pending] } }
+      responses:
+        '200':
+          description: Sanciones
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PenaltyView' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /penalties/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      summary: Detalle de una sancion (404 si es de otro estudiante)
+      responses:
+        '200':
+          description: Sancion
+          content: { application/json: { schema: { $ref: '#/components/schemas/PenaltyView' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /penalties/{id}/payments:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      summary: Pagar una sancion propia con saldo institucional (estudiante)
+      responses:
+        '201':
+          description: Comprobante
+          content: { application/json: { schema: { $ref: '#/components/schemas/PaymentReceipt' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /notifications:
+    get:
+      summary: Notificaciones del estudiante
+      parameters:
+        - { name: filter, in: query, schema: { type: string, enum: [all, unread, dueDates, penalties] } }
+      responses:
+        '200':
+          description: Notificaciones
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Notification' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /notifications/read-all:
+    post:
+      summary: Marcar todas como leidas (estudiante)
+      responses:
+        '200':
+          description: Notificaciones actualizadas
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Notification' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /notifications/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    patch:
+      summary: Marcar una notificacion como leida (estudiante)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [read], properties: { read: { type: boolean, enum: [true] } } }
+      responses:
+        '200':
+          description: Notificacion
+          content: { application/json: { schema: { $ref: '#/components/schemas/Notification' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /indicators:
+    get:
+      summary: Indicadores del panel (bibliotecario)
+      parameters: [{ $ref: '#/components/parameters/siteIdQuery' }]
+      responses:
+        '200':
+          description: Indicadores
+          content: { application/json: { schema: { $ref: '#/components/schemas/Indicators' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /activities:
+    get:
+      summary: Actividad reciente (bibliotecario)
+      responses:
+        '200':
+          description: Actividad
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Activity' } } } }
+        default: { $ref: '#/components/responses/Error' }
