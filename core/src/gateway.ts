@@ -26,9 +26,17 @@ export const gateway = (o: OpcionesGateway): RequestHandler[] => [
     const tipo = req.header("content-type");
     if (tipo) headers["content-type"] = tipo;
     const ruta = req.originalUrl.split("?")[0];
+    const base = new URL(o.libraryUrl);
+    const destino = new URL(req.originalUrl, base);
+    // fetch normaliza los ".."; se rechaza el camino crudo antes para que no llegue a otra ruta con la clave del Gateway.
+    if (/(^|\/)\.\.?(\/|$)|%2e|%2f|%5c/i.test(ruta) || destino.origin !== base.origin
+      || !(destino.pathname === "/api/v1/library" || destino.pathname.startsWith("/api/v1/library/"))) {
+      res.status(400).json({ code: "INVALID_PATH", message: "Ruta inválida." });
+      return;
+    }
     const conCuerpo = !["GET", "HEAD"].includes(req.method) && Buffer.isBuffer(req.body) && req.body.length > 0;
     try {
-      const r = await fetch(o.libraryUrl.replace(/\/$/, "") + req.originalUrl, {
+      const r = await fetch(destino, {
         method: req.method, headers, body: conCuerpo ? new Uint8Array(req.body) : undefined,
         signal: AbortSignal.timeout(10000),
       });

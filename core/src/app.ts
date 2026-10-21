@@ -46,13 +46,14 @@ export function crearApp(deps: DepsCore): express.Express {
     res.json(r.map(lectorDto));
   });
   interno.post("/wallets/:userId/debits", (req, res) => {
-    const { amount, externalReference } = req.body ?? {};
-    if (typeof amount !== "string" || !(Number(amount) > 0) || typeof externalReference !== "string" || !externalReference) {
+    const { amount, currency, externalReference } = req.body ?? {};
+    if (typeof amount !== "string" || !/^\d+(\.\d{1,2})?$/.test(amount) || !(Number(amount) > 0) || currency !== "ARS" || typeof externalReference !== "string" || !externalReference) {
       res.status(400).json({ code: "VALIDATION_ERROR", message: "Monto o referencia inválidos." });
       return;
     }
     const r = debitar(String(req.params.userId), amount, externalReference);
     if (r.estado === "sin_usuario") res.status(404).json({ code: "NOT_FOUND", message: "No encontramos al usuario." });
+    else if (r.estado === "conflicto") res.status(409).json({ code: "IDEMPOTENCY_CONFLICT", message: "La referencia ya se usó con otros datos." });
     else if (r.estado === "sin_fondos") res.status(409).json({ code: "INSUFFICIENT_FUNDS", message: "Saldo insuficiente." });
     else res.status(r.estado === "ok" ? 201 : 200).json({ operationId: r.operationId, balance: r.balance });
   });
@@ -70,7 +71,7 @@ export function crearApp(deps: DepsCore): express.Express {
 
   app.use(((err, _req, res, _next) => {
     if (err?.status && err?.code) res.status(err.status).json({ code: err.code, message: err.message });
-    else if (err?.type === "entity.parse.failed") res.status(400).json({ code: "VALIDATION_ERROR", message: "El cuerpo de la solicitud no es un JSON válido." });
+    else if (err?.type === "entity.parse.failed" || (err?.status >= 400 && err?.status < 500)) res.status(err.status ?? 400).json({ code: "VALIDATION_ERROR", message: "El cuerpo de la solicitud no es un JSON válido." });
     else { log(`[core] ERROR ${err?.stack ?? err}`); res.status(500).json({ code: "INTERNAL_ERROR", message: "Ocurrió un error inesperado. Intentá de nuevo." }); }
   }) as express.ErrorRequestHandler);
   return app;

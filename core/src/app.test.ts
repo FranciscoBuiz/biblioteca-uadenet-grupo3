@@ -1,6 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import type { Server } from "node:http";
+import http, { type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import jwt from "jsonwebtoken";
@@ -9,6 +9,7 @@ import { crearApp } from "./app.js";
 const JWT = "secreto-de-prueba", GW = "gw-key", SK = "svc-key", ORIGEN = "http://localhost:3000";
 let core: Server, lib: Server, base: string;
 let libUrl: string;
+let golpes = 0;
 
 const escuchar = (app: express.Express) =>
   new Promise<Server>((ok) => { const s = app.listen(0, "127.0.0.1", () => ok(s)); });
@@ -17,7 +18,12 @@ const url = (s: Server) => `http://127.0.0.1:${(s.address() as AddressInfo).port
 before(async () => {
   // Biblioteca simulada: devuelve los headers recibidos.
   const falsa = express();
-  falsa.use((req, res) => res.status(200).json({ method: req.method, url: req.originalUrl, headers: req.headers }));
+  falsa.use(express.text({ type: "*/*" }));
+  falsa.use((req, res) => {
+    golpes++;
+    if (req.path.endsWith("/conflicto")) { res.status(409).json({ code: "ALREADY_PAID", message: "Esta multa ya fue abonada." }); return; }
+    res.status(200).json({ method: req.method, url: req.originalUrl, headers: req.headers, body: req.body });
+  });
   lib = await escuchar(falsa);
   libUrl = url(lib);
   core = await escuchar(crearApp({ jwtSecret: JWT, gatewayKey: GW, serviceKey: SK, libraryUrl: libUrl, frontendOrigin: ORIGEN }));
@@ -101,6 +107,30 @@ test("gateway reenvía método, body y Content-Type", async () => {
   const b = (await r.json()) as any;
   assert.equal(b.method, "POST");
   assert.equal(b.headers["content-type"], "application/json");
+  assert.equal(b.body, '{"isbn":"1"}');
+});
+
+test("gateway devuelve tal cual el status y body de la biblioteca (409)", async () => {
+  const t = await tokenDe("ana.garcia@uade.edu.ar");
+  const r = await fetch(`${base}/api/v1/library/penalties/SAN-1/conflicto`, { method: "POST", headers: { authorization: `Bearer ${t}` } });
+  assert.equal(r.status, 409);
+  assert.deepEqual(await r.json(), { code: "ALREADY_PAID", message: "Esta multa ya fue abonada." });
+});
+
+test("gateway rechaza rutas con '..' o separadores codificados: 400 y la biblioteca no se toca", async () => {
+  const t = await tokenDe("ana.garcia@uade.edu.ar");
+  const antes = golpes;
+  for (const ruta of ["/api/v1/library/../../docs", "/api/v1/library/%2e%2e/x", "/api/v1/library/a%2fb", "/api/v1/library/%2E%2E%2Fdocs"]) {
+    // http.get no normaliza la ruta (fetch si, y ocultaria el "..").
+    const r = await new Promise<{ status: number; body: string }>((ok, ko) => {
+      http.get({ host: "127.0.0.1", port: (core.address() as AddressInfo).port, path: ruta, headers: { authorization: `Bearer ${t}` } }, (res) => {
+        let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => ok({ status: res.statusCode!, body: d }));
+      }).on("error", ko);
+    });
+    assert.equal(r.status, 400, ruta);
+    assert.equal(JSON.parse(r.body).code, "INVALID_PATH");
+  }
+  assert.equal(golpes, antes);
 });
 
 test("gateway ignora X-User-Id enviado por el cliente: llega u-ana", async () => {
@@ -157,6 +187,24 @@ test("débito idempotente por externalReference: dos POST, saldo baja una vez", 
   const bb = (await b.json()) as any;
   assert.equal(bb.operationId, ba.operationId);
   assert.equal(bb.balance, "0.00");
+});
+
+test("débito: monto/moneda inválidos → 400; misma referencia con otros datos → 409 IDEMPOTENCY_CONFLICT", async () => {
+  assert.equal((await debito("u-julian", "penalty/V1", "-5")).status, 400);
+  assert.equal((await debito("u-julian", "penalty/V2", "10.123")).status, 400);
+  const mon = await fetch(`${base}/internal/v1/wallets/u-julian/debits`, { method: "POST", headers: interno, body: JSON.stringify({ amount: "10.00", currency: "USD", externalReference: "penalty/V3" }) });
+  assert.equal(mon.status, 400);
+  assert.equal((await debito("u-julian", "penalty/C1", "100.00")).status, 201);
+  const otroMonto = await debito("u-julian", "penalty/C1", "200.00");
+  assert.equal(otroMonto.status, 409);
+  assert.equal(((await otroMonto.json()) as any).code, "IDEMPOTENCY_CONFLICT");
+  assert.equal((await debito("u-camila", "penalty/C1", "100.00")).status, 409);
+});
+
+test("body demasiado grande al gateway → 413, no 500", async () => {
+  const t = await tokenDe("ana.garcia@uade.edu.ar");
+  const r = await fetch(`${base}/api/v1/library/loans`, { method: "POST", headers: { authorization: `Bearer ${t}`, "content-type": "text/plain" }, body: "x".repeat(2_000_000) });
+  assert.equal(r.status, 413);
 });
 
 test("débito sin saldo → 409 INSUFFICIENT_FUNDS", async () => {

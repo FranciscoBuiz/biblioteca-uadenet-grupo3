@@ -34,7 +34,7 @@ export const exigirToken = (secreto: string): RequestHandler => (req, res, next)
   const m = /^Bearer (.+)$/.exec(req.header("authorization") ?? "");
   try {
     if (!m) throw new Error("sin token");
-    const p = jwt.verify(m[1], secreto, { algorithms: ["HS256"] }) as jwt.JwtPayload;
+    const p = jwt.verify(m[1], secreto, { algorithms: ["HS256"], maxAge: "8h" }) as jwt.JwtPayload;
     const l = LECTORES.find((u) => u.id === p.sub);
     if (!l) throw new Error("usuario desconocido");
     res.locals.lector = l;
