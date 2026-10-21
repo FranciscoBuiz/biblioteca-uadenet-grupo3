@@ -2,7 +2,7 @@
   "name": "biblioteca-uadenet",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["frontend", "library"],
+  "workspaces": ["frontend", "library", "core"],
   "scripts": {
     "dev": "concurrently -n frontend \"npm run dev -w @uadenet/frontend\"",
     "test": "npm run test --workspaces --if-present",
