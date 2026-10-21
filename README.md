@@ -11,16 +11,17 @@ Barbieri · Brandt · Buiz · Marinoni · Sanguineti
 ## Cómo levantarlo
 
 ```bash
-npm install
-npm run dev     # http://localhost:3000
+npm install               # en la raíz (workspaces)
+docker compose up -d      # RabbitMQ (5672, panel en 15672)
+npm run dev               # frontend en http://localhost:3000
 ```
 
 Otros comandos:
 
 ```bash
-npm run build       # build de producción
-npm run typecheck   # tsc --noEmit
-npm run lint
+npm run build -w @uadenet/frontend       # build de producción
+npm run typecheck                        # tsc --noEmit en los workspaces
+npm run lint -w @uadenet/frontend
 ```
 
 ## Cuentas de la demo
