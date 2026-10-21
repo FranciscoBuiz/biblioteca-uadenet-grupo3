@@ -6,7 +6,7 @@
 
 **Architecture:** Monorepo con npm workspaces y cuatro componentes que no se importan código entre sí: `frontend/` (Next.js actual), `core/` (login JWT, Gateway, billetera, eventos, usuarios), `library/` (rutas → servicios → repositorios en memoria detrás de interfaces) y `backoffice/` (CLI que publica en RabbitMQ). Los contratos viven en `library/openapi.yaml` y `docs/integracion.md`.
 
-**Tech Stack:** Node 22, TypeScript 5.9 strict, Express 5, zod, jsonwebtoken, amqplib, swagger-ui-express + yaml, cors, tsx, `node:test`, concurrently, RabbitMQ 3 (Docker), Next.js 15 / React 19.
+**Tech Stack:** Node 22, TypeScript 5.9 strict, Express 5, zod, jsonwebtoken, amqplib, mariadb (conector oficial), swagger-ui-express + yaml, cors, tsx, `node:test`, concurrently, RabbitMQ 3.13 y MariaDB 11.4 (Docker), Next.js 15 / React 19.
 
 **Spec:** `docs/superpowers/specs/2026-10-21-biblioteca-uadenet-backend-design.md`, que hay que leer junto con este plan.
 
@@ -22,6 +22,7 @@
 - Contratos de la planilla con su estructura exacta: `POST /internal/v1/wallets/{userId}/debits` `{amount:"2500.00", currency:"ARS", concept:"LIBRARY_FINE", sourceModule:"library", externalReference:"penalty/{id}"}`; `POST /internal/v1/events` `{eventType:"library.penalty.applied.v1", source:"library", subject:"user/{userId}", data:{userId, loanId, daysLate, amount, currency}}`; mensajes `backoffice.rate.changed.v1` y `backoffice.location.upserted.v1`.
 - Ids legibles (`PRE-1003`, `SAN-00031`, `u-ana`, sedes `monserrat|belgrano|pinamar`).
 - No agregar dependencias fuera de las del Tech Stack.
+- Base de datos: **MariaDB** (decisión del usuario). El `Repositorio` es asíncrono en todas sus operaciones; el de memoria existe para tests y se implementa primero, MariaDB llega en la Task 12 (orden de ejecución: Tasks 1–11, después 12).
 - Cada task termina con `npx tsc --noEmit` limpio en los componentes que tocó. La única excepción es la Task 9: puede dejar errores solo en las pantallas que todavía usan `lib/store`, y la Task 10 los cierra.
 
 ## Review Focus
@@ -96,24 +97,29 @@ backoffice/src/publicar.ts        CLI
 **Interfaces:**
 - Produces:
   ```ts
-  // datos/repositorio.ts
+  // datos/repositorio.ts — TODO es asíncrono: la implementación real es MariaDB (Task 12)
   export interface Repositorio {
-    libros(): Book[]; libro(isbn: string): Book | undefined;
-    guardarLibro(libro: Book): void;
-    ejemplares(isbn?: string): Copy[]; guardarEjemplares(copias: Copy[]): void;
-    prestamos(): Loan[]; prestamo(id: string): Loan | undefined; guardarPrestamo(l: Loan): void;
-    guardarSancion(p: Penalty): void;
-    sanciones(): Penalty[]; sancion(id: string): Penalty | undefined; sancionDe(loanId: string): Penalty | undefined;
-    notificaciones(userId: string): Notification[]; guardarNotificaciones(n: Notification[]): void;
-    actividad(): Activity[]; registrarActividad(a: Activity): void;
-    tarifas(): Tarifa[]; agregarTarifa(t: Tarifa): void;
-    ubicaciones(): Location[]; guardarUbicacion(l: Location): void;
-    siguienteId(tipo: "prestamo" | "sancion"): string;   // "PRE-1009", "SAN-00032"
-    /** Unidad de trabajo: todo lo que se escribe adentro se aplica junto o nada (en SQL será una transacción). */
-    transaccion<T>(trabajo: (repo: Repositorio) => T): T;
+    libros(): Promise<Book[]>; libro(isbn: string): Promise<Book | undefined>;
+    guardarLibro(libro: Book): Promise<void>;
+    ejemplares(isbn?: string): Promise<Copy[]>; guardarEjemplares(copias: Copy[]): Promise<void>;
+    prestamos(): Promise<Loan[]>; prestamo(id: string): Promise<Loan | undefined>; guardarPrestamo(l: Loan): Promise<void>;
+    guardarSancion(p: Penalty): Promise<void>;
+    sanciones(): Promise<Penalty[]>; sancion(id: string): Promise<Penalty | undefined>; sancionDe(loanId: string): Promise<Penalty | undefined>;
+    notificaciones(userId: string): Promise<Notification[]>; guardarNotificaciones(n: Notification[]): Promise<void>;
+    actividad(): Promise<Activity[]>; registrarActividad(a: Activity): Promise<void>;
+    tarifas(): Promise<Tarifa[]>; agregarTarifa(t: Tarifa): Promise<void>;
+    ubicaciones(): Promise<Location[]>; guardarUbicacion(l: Location): Promise<void>;
+    siguienteId(tipo: "prestamo" | "sancion"): Promise<string>;   // "PRE-1009", "SAN-00032"
+    /**
+     * Unidad de trabajo: todo lo que se escribe adentro se aplica junto o nada
+     * (en MariaDB, una transacción). Las transacciones se SERIALIZAN: dos pedidos
+     * por el último ejemplar no pueden leer el mismo estado.
+     */
+    transaccion<T>(trabajo: (repo: Repositorio) => Promise<T>): Promise<T>;
   }
   export function crearRepositorioEnMemoria(hoy: FechaISO): Repositorio; // en memoria.ts, sembrado y desplazado
   ```
+  Tipos de guardado: `guardarX` hace upsert por clave primaria.
   ```ts
   // datos/seed.ts
   export const FECHA_MAQUETA = "2026-08-26";
@@ -123,29 +129,40 @@ backoffice/src/publicar.ts        CLI
 
 - [ ] **Step 1: Tests que fallan**
   ```ts
-  test("seed desplazado: PRE-1003 vence en 2 días y PRE-1001 lleva 18 de atraso", () => {
+  Estos tests de contrato se escriben como `export function contratoRepositorio(nombre: string, crear: (hoy: FechaISO) => Promise<Repositorio>)` en `library/src/datos/contrato.ts`, para que la Task 12 los corra contra MariaDB. `memoria.test.ts` los invoca con `async (hoy) => crearRepositorioEnMemoria(hoy)`.
+  ```ts
+  test("seed desplazado: PRE-1003 vence en 2 días y PRE-1001 lleva 18 de atraso", async () => {
     const hoy = "2026-11-02";
-    const repo = crearRepositorioEnMemoria(hoy);
-    assert.equal(diasRestantes(repo.prestamo("PRE-1003")!, hoy), 2);
-    assert.equal(diasAtraso(repo.prestamo("PRE-1001")!, hoy), 18);
+    const repo = await crear(hoy);
+    assert.equal(diasRestantes((await repo.prestamo("PRE-1003"))!, hoy), 2);
+    assert.equal(diasAtraso((await repo.prestamo("PRE-1001"))!, hoy), 18);
   });
-  test("siguienteId continúa la secuencia del seed", () => {
-    const repo = crearRepositorioEnMemoria("2026-08-26");
-    assert.equal(repo.siguienteId("prestamo"), "PRE-1009");
-    assert.equal(repo.siguienteId("sancion"), "SAN-00032");
+  test("siguienteId continúa la secuencia del seed", async () => {
+    const repo = await crear("2026-08-26");
+    assert.equal(await repo.siguienteId("prestamo"), "PRE-1009");
+    assert.equal(await repo.siguienteId("sancion"), "SAN-00032");
   });
-  test("transaccion descarta todo si el trabajo lanza", () => {
-    const repo = crearRepositorioEnMemoria("2026-08-26");
-    const antes = repo.prestamos().length;
-    assert.throws(() => repo.transaccion((r) => { r.guardarPrestamo({ ...r.prestamo("PRE-1003")!, id: "PRE-X" }); throw new Error("x"); }));
-    assert.equal(repo.prestamos().length, antes);
+  test("transaccion descarta todo si el trabajo lanza", async () => {
+    const repo = await crear("2026-08-26");
+    const antes = (await repo.prestamos()).length;
+    await assert.rejects(repo.transaccion(async (r) => { await r.guardarPrestamo({ ...(await r.prestamo("PRE-1003"))!, id: "PRE-X" }); throw new Error("x"); }));
+    assert.equal((await repo.prestamos()).length, antes);
   });
-  test("tarifa inicial 2500 vigente desde la fecha de arranque", () => {
-    assert.deepEqual(crearRepositorioEnMemoria("2026-08-26").tarifas(), [{ monto: 2500, vigenteDesde: "2026-08-26" }]);
+  test("transacciones concurrentes se serializan", async () => {
+    const repo = await crear("2026-08-26");
+    const orden: string[] = [];
+    await Promise.all([
+      repo.transaccion(async () => { orden.push("a1"); await new Promise((r) => setTimeout(r, 20)); orden.push("a2"); }),
+      repo.transaccion(async () => { orden.push("b1"); orden.push("b2"); }),
+    ]);
+    assert.deepEqual(orden, ["a1", "a2", "b1", "b2"]);
+  });
+  test("tarifa inicial 2500 vigente desde la fecha de arranque", async () => {
+    assert.deepEqual(await (await crear("2026-08-26")).tarifas(), [{ monto: 2500, vigenteDesde: "2026-08-26" }]);
   });
   ```
 - [ ] **Step 2:** Correr `npm test -w @uadenet/library`. Esperado: FAIL porque los módulos todavía no existen.
-- [ ] **Step 3:** Implementar. **Copiar** (no mover: el frontend lo usa hasta la Task 10) `frontend/src/lib/store/seed.ts` a `library/src/datos/seed.ts` y adaptarlo: cambiar los imports, renombrar `USUARIOS` a `LECTORES` y desplazar las fechas. `transaccion` en memoria: hace un `structuredClone` del estado, ejecuta el trabajo y, si lanza, restaura el clon. Alcanza porque es sincrónico.
+- [ ] **Step 3:** Implementar. **Copiar** (no mover: el frontend lo usa hasta la Task 10) `frontend/src/lib/store/seed.ts` a `library/src/datos/seed.ts` y adaptarlo: cambiar los imports, renombrar `USUARIOS` a `LECTORES` y desplazar las fechas. `transaccion` en memoria: encadena las transacciones en una cola de promesas (mutex), y dentro de cada una hace un `structuredClone` del estado, ejecuta el trabajo y, si lanza, restaura el clon. Los datos devueltos por las lecturas son copias, nunca referencias al estado interno.
 - [ ] **Step 4:** Correr `npm test -w @uadenet/library`. Esperado: PASS.
 - [ ] **Step 5:** Commit `feat(library): dominio, repositorio en memoria y seed relativo a hoy`.
 
@@ -176,6 +193,7 @@ backoffice/src/publicar.ts        CLI
   // servicios/errores.ts
   export class ErrorNegocio extends Error { constructor(readonly code: string, mensaje: string, readonly status = 400) }
   ```
+  - **Todas las funciones de servicio son `async` y devuelven `Promise<...>`** del tipo indicado, porque el repositorio es asíncrono.
   - `catalogo.ts`: `listarLibros(repo, filtro: FiltroCatalogo): BookWithStock[]`, `obtenerLibro(repo, isbn): BookWithStock`, `crearLibro(repo, datos: AltaLibro, hoy): Book`, `editarLibro(repo, isbn, cambios: Partial<Omit<Book,"isbn"|"activo">>): Book`, `activarLibro(repo, isbn, activo: boolean): Book`, `listarEjemplares(repo, isbn): Copy[]`, `agregarEjemplares(repo, isbn, sede, cantidad, hoy): Copy[]`, `cambiarEstadoEjemplar(repo, isbn, codigo, estado): Copy`, `categorias(repo): string[]`. `FiltroCatalogo` y `AltaLibro` tienen la misma forma que en `frontend/src/lib/api/books.ts`.
   - `notificaciones.ts`: `listarNotificaciones(repo, userId, filtro: FiltroNotificaciones)`, `marcarLeida(repo, userId, id): Notification`, `marcarTodasLeidas(repo, userId): void`, `notificar(repo, userId, tipo, titulo, cuerpo, hoy): void`.
   - `panel.ts`: `indicadores(repo, sede: SedeId | "todas", hoy): Indicadores`, `actividadReciente(repo): Activity[]`.
@@ -210,11 +228,11 @@ backoffice/src/publicar.ts        CLI
   // prestamos.ts
   listarPrestamos(ctx, filtro: FiltroPrestamos): Promise<LoanView[]>   // q busca también por DNI/legajo vía core.lectores
   obtenerPrestamo(ctx, id, userId?: string): Promise<LoanView>         // userId presente = estudiante: si no es suyo → 404
-  solicitarPrestamo(ctx, isbn, sede, userId): Loan
-  renovarPrestamo(ctx, id, userId): Loan
+  solicitarPrestamo(ctx, isbn, sede, userId): Promise<Loan>
+  renovarPrestamo(ctx, id, userId): Promise<Loan>
   devolverPrestamo(ctx, id): Promise<{ prestamo: Loan; sancion: Penalty | null }>
   // sanciones.ts
-  montoVigente(repo, hoy): number                                      // tarifa con vigenteDesde <= hoy más reciente
+  montoVigente(repo, hoy): Promise<number>                             // tarifa con vigenteDesde <= hoy más reciente
   aplicarSancion(ctx, prestamo: Loan): Promise<Penalty | null>         // null si ya tenía o no corresponde; publica evento una vez
   listarSanciones(ctx, filtro: FiltroSanciones): Promise<PenaltyView[]>
   obtenerSancion(ctx, id, userId?: string): Promise<PenaltyView>
@@ -227,7 +245,7 @@ backoffice/src/publicar.ts        CLI
 - [ ] **Step 1: Tests que fallan** (en todos, `hoy` es la fecha del seed y `core = new CoreFalso()`)
   ```ts
   test("solicitar con sanción pendiente → SANCTION_PENDING con el mensaje 'Tenés una sanción pendiente de pago…'", ...)
-  test("último ejemplar: el segundo pedido falla con NO_COPIES y el ejemplar queda asignado a un solo préstamo", ...)
+  test("último ejemplar: dos solicitudes lanzadas a la vez con Promise.allSettled → una fulfilled, otra rejected NO_COPIES, y el ejemplar asignado a un solo préstamo", ...)
   test("renovar suma 3 días; la tercera renovación falla con RENEWAL_LIMIT", ...)
   test("renovar préstamo ajeno → 404 NOT_FOUND", ...)
   test("devolver con 9 días de atraso crea sanción de 2500, libera el ejemplar y publica 1 evento con subject 'user/<id>' y data.amount '2500.00'", ...)
@@ -241,7 +259,7 @@ backoffice/src/publicar.ts        CLI
   test("pagar con CORE caído → 503 CORE_UNAVAILABLE y la sanción sigue pendiente", ...)
   ```
 - [ ] **Step 2:** Correr los tests. Esperado: FAIL.
-- [ ] **Step 3:** Implementar. Las escrituras de `solicitarPrestamo`, `devolverPrestamo` y `aplicarSancion` van dentro de `repo.transaccion`. Las llamadas al CORE quedan **fuera** de la transacción: en el pago, primero el débito y después marcar cobrada; en la sanción, primero guardar y después publicar, envolviendo la publicación en try/catch con `console.error` que incluya el correlationId. La sanción congela `diasAtraso` y `monto = montoVigente(repo, hoy)`. Mensaje de saldo insuficiente: "No tenés saldo suficiente en tu cuenta UADEnet para pagar esta multa.". Mensaje de CORE caído: "No pudimos procesar el pago en este momento. Intentá de nuevo en unos minutos.".
+- [ ] **Step 3:** Implementar. Las lecturas que deciden **y** las escrituras de `solicitarPrestamo`, `renovarPrestamo`, `devolverPrestamo`, `aplicarSancion` y el marcado de cobro de `pagarSancion` van dentro de `repo.transaccion` (leer el ejemplar disponible fuera de la transacción rompe la garantía del último ejemplar). Las llamadas al CORE quedan **fuera** de la transacción: en el pago, primero el débito y después marcar cobrada; en la sanción, primero guardar y después publicar, envolviendo la publicación en try/catch con `console.error` que incluya el correlationId. La sanción congela `diasAtraso` y `monto = montoVigente(repo, hoy)`. Mensaje de saldo insuficiente: "No tenés saldo suficiente en tu cuenta UADEnet para pagar esta multa.". Mensaje de CORE caído: "No pudimos procesar el pago en este momento. Intentá de nuevo en unos minutos.".
 - [ ] **Step 4:** Correr los tests. Esperado: PASS.
 - [ ] **Step 5:** Commit `feat(library): préstamos, sanciones, pagos y detección de atrasos`.
 
@@ -388,7 +406,7 @@ El cuerpo de entrada usa los mismos nombres en inglés. Todo se valida con zod; 
 - Produces:
   ```ts
   export type Resultado = "aplicado" | "ignorado" | "invalido";
-  export function procesarMensaje(repo: Repositorio, routingKey: string, contenido: Buffer): Resultado; // pura, testeable
+  export function procesarMensaje(repo: Repositorio, routingKey: string, contenido: Buffer, hoy: FechaISO): Promise<Resultado>; // sin AMQP, testeable
   export function iniciarConsumidor(url: string, repo: Repositorio): void; // nunca lanza; reintenta cada 5 s
   ```
 - Topología, declarada por `iniciarConsumidor`:
@@ -500,3 +518,38 @@ El cuerpo de entrada usa los mismos nombres en inglés. Todo se valida con zod; 
   - una sección "Base de datos (pendiente)": hay que implementar `Repositorio` en `library/src/datos/` y cambiar una línea de `server.ts`.
 - [ ] **Step 3:** Correr `npm test` y `npm run typecheck` en la raíz. Esperado: todo PASS y limpio.
 - [ ] **Step 4:** Commit `docs: contratos de integración y README de la app completa`.
+
+---
+
+### Task 12: Repositorio MariaDB (motor elegido por el usuario el 2026-10-21)
+
+**Files:**
+- Modify: `docker-compose.yml`: agregar el servicio `mariadb` con la imagen `mariadb:11.4`, el puerto `127.0.0.1:3306:3306` y el volumen nombrado `mariadb-datos`. La base `biblioteca` y el usuario `biblioteca` se crean con `MARIADB_DATABASE`, `MARIADB_USER`, `MARIADB_PASSWORD` y `MARIADB_ROOT_PASSWORD`, leídos de un `.env` en la raíz (no versionado). Versionar `.env.example` con valores de desarrollo.
+- Create: `library/src/datos/esquema.sql`, `library/src/datos/mariadb.ts`, `library/src/datos/mariadb.test.ts`
+- Modify: `library/package.json` (dependencia `mariadb`, el conector oficial; sin ORM), `library/.env.example` (`DATABASE_URL=mariadb://biblioteca:<pass>@127.0.0.1:3306/biblioteca`), `library/src/server.ts`, `README.md`, `docs/integracion.md` (sección "Base de datos")
+
+**Interfaces:**
+- Consumes: `Repositorio`, `contratoRepositorio`, `sembrar` y `FECHA_MAQUETA` (Task 2).
+- Produces:
+  ```ts
+  export function crearRepositorioMariaDB(pool: mariadb.Pool, hoy: FechaISO): Promise<Repositorio>; // aplica esquema.sql (CREATE TABLE IF NOT EXISTS) y siembra si `libros` está vacía
+  export function borrarEsquema(pool: mariadb.Pool): Promise<void>; // solo para tests
+  ```
+- Esquema (InnoDB, utf8mb4):
+  - tablas `libros` (PK isbn), `ejemplares` (PK codigo, FK isbn), `prestamos` (PK id, FK isbn y copia), `sanciones` (PK id, FK loan_id **UNIQUE**: una sanción por préstamo), `notificaciones`, `actividad`, `tarifas`, `ubicaciones` (PK location_id) y `secuencias` (nombre, valor);
+  - las fechas del dominio son `DATE`, salvo `actividad.fecha_hora`, que es `DATETIME`;
+  - los montos son `DECIMAL(10,2)`;
+  - `user_id` es `VARCHAR` sin FK, porque los usuarios son del CORE.
+- `transaccion`: toma una conexión del pool, ejecuta `BEGIN`, bloquea con `SELECT valor FROM secuencias WHERE nombre = 'lock' FOR UPDATE` y ejecuta el trabajo con un `Repositorio` atado a esa conexión. Si sale bien hace `COMMIT`; si falla, `ROLLBACK` y relanza. Siempre libera la conexión. Llevar el comentario `// shortcut: un lock global serializa todas las escrituras; alcanza para una biblioteca, pasar a locks por fila si hay contención`.
+- `siguienteId` incrementa `secuencias` dentro de la conexión actual.
+- `server.ts`: `DATABASE_URL` es obligatoria. Si MariaDB no responde al arrancar, loguear "No se pudo conectar a MariaDB en <host>. ¿Levantaste `docker compose up -d`?" y salir con código 1. El repositorio en memoria queda solo para tests.
+
+- [ ] **Step 1: Test que falla:** `mariadb.test.ts` llama a `contratoRepositorio("mariadb", async (hoy) => { await borrarEsquema(pool); return crearRepositorioMariaDB(pool, hoy); })` cuando existe `MARIADB_TEST_URL`. Si no existe, hace un `test.skip` con el motivo "MARIADB_TEST_URL no definida". Agregar también:
+  ```ts
+  test("FK única: una segunda sanción para el mismo préstamo falla y no queda nada escrito", ...)
+  test("los datos sobreviven a crear un segundo repositorio sobre el mismo pool (persistencia real)", ...)
+  ```
+- [ ] **Step 2:** Correr `docker compose up -d mariadb` y después `MARIADB_TEST_URL=… npm test -w @uadenet/library`. Esperado: FAIL.
+- [ ] **Step 3:** Implementar.
+- [ ] **Step 4:** Correr los tests. Esperado: PASS con MariaDB, y la suite de memoria sigue en PASS. Después probar a mano con `npm run dev`: pedir un préstamo, reiniciar la Biblioteca y verificar que el préstamo sigue estando.
+- [ ] **Step 5:** Commit `feat(library): repositorio MariaDB`.

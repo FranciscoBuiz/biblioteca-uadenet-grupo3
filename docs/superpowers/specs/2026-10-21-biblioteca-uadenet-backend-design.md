@@ -50,7 +50,6 @@ Los contratos entre módulos son los que el grupo ya documentó en
 
 ## No objetivos
 
-- Elegir o instalar el motor SQL (queda para después; ver "Base de datos").
 - Un CORE o Backoffice "de verdad": solo lo mínimo para cumplir los contratos.
 - Despliegue a la nube, HTTPS, CI/CD.
 - SOAP (no hay ningún contrato SOAP en la planilla).
@@ -321,9 +320,13 @@ dirección, canal (REST síncrono / cola asíncrona), identificador y ejemplo.
 Así cada componente puede tener un dueño distinto y trabajar en paralelo
 (Clases 2–3).
 
-## Base de datos (pendiente)
+## Base de datos
 
-El motor SQL se elige después. Mientras tanto:
+**Actualización 2026-10-21:** el usuario eligió **MariaDB**. Se implementa como un
+`Repositorio` más (conector oficial `mariadb`, sin ORM), con MariaDB 11.4 en el
+mismo `docker-compose.yml`. Como el acceso es asíncrono, la interfaz del
+repositorio es asíncrona desde el principio. Lo de abajo sigue valiendo como
+guía de diseño:
 
 - Las interfaces de repositorio se diseñan pensando en SQL: entidades con clave
   primaria, relaciones por id (préstamo → ejemplar → libro; sanción →
@@ -336,7 +339,8 @@ El motor SQL se elige después. Mientras tanto:
   quedarse con el mismo. En memoria lo garantiza el event loop si la operación
   es sincrónica; la interfaz debe permitir que la versión SQL lo resuelva con
   una transacción.
-- Fuera de alcance por ahora: migraciones, ORM, driver.
+- Esquema creado al arrancar (`CREATE TABLE IF NOT EXISTS`) y seed si la base
+  está vacía; sin herramienta de migraciones ni ORM.
 
 ## Verificación
 
