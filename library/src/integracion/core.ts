@@ -61,3 +61,60 @@ export class CoreFalso implements PuertoCore {
     this.eventos.push(evento);
   }
 }
+
+interface LectorDto {
+  id: string; name: string; email: string; studentId: string; nationalId: string;
+  role: "student" | "librarian"; defaultSiteId: Lector["sedeDefault"]; initials: string; label: string;
+}
+
+/** Cliente HTTP del CORE real (rutas /internal/v1, autenticadas con X-Service-Key). */
+export class CoreHttp implements PuertoCore {
+  constructor(private baseUrl: string, private serviceKey: string) {}
+
+  private async pedir(metodo: "GET" | "POST", ruta: string, correlationId: string, body?: unknown): Promise<unknown> {
+    let r: Response;
+    try {
+      r = await fetch(this.baseUrl + ruta, {
+        method: metodo,
+        headers: { "x-service-key": this.serviceKey, "x-correlation-id": correlationId, ...(body ? { "content-type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (e) {
+      throw new CoreNoDisponible(`CORE no disponible: ${(e as Error).message}`);
+    }
+    const datos = (await r.json().catch(() => ({}))) as { code?: string };
+    if (r.ok) return datos;
+    if (r.status >= 500) throw new CoreNoDisponible(`CORE respondio ${r.status}`);
+    if (r.status === 409 && datos.code === "INSUFFICIENT_FUNDS") throw new SaldoInsuficiente("Saldo insuficiente");
+    throw new Error(`CORE respondio ${r.status} ${datos.code ?? ""} en ${metodo} ${ruta}`);
+  }
+
+  private async usuarios(query: string, correlationId: string): Promise<Lector[]> {
+    const dtos = (await this.pedir("GET", `/internal/v1/users?${query}`, correlationId)) as LectorDto[];
+    return dtos.map((d) => ({
+      id: d.id, nombre: d.name, email: d.email, legajo: d.studentId, dni: d.nationalId,
+      rol: d.role === "librarian" ? "bibliotecario" : "estudiante",
+      sedeDefault: d.defaultSiteId, iniciales: d.initials, etiqueta: d.label,
+    }));
+  }
+
+  lectores(ids: string[], correlationId: string) {
+    return this.usuarios(new URLSearchParams({ ids: ids.join(",") }).toString().replace(/%2C/g, ","), correlationId);
+  }
+
+  buscarLectores(q: string, correlationId: string) {
+    return this.usuarios(new URLSearchParams({ q }).toString(), correlationId);
+  }
+
+  async debitar(userId: string, monto: number, penaltyId: string, correlationId: string) {
+    const r = (await this.pedir("POST", `/internal/v1/wallets/${encodeURIComponent(userId)}/debits`, correlationId, {
+      amount: monto.toFixed(2), currency: "ARS", concept: "LIBRARY_FINE", sourceModule: "library", externalReference: `penalty/${penaltyId}`,
+    })) as { operationId: string };
+    return { operacion: r.operationId };
+  }
+
+  async publicarEvento(evento: EventoSancion, correlationId: string) {
+    await this.pedir("POST", "/internal/v1/events", correlationId, evento);
+  }
+}

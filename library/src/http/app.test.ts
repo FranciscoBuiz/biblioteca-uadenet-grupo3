@@ -38,6 +38,15 @@ describe("API HTTP", () => {
     assert.equal((await r.json()).code, "GATEWAY_REQUIRED");
   });
 
+  test("clave del mismo largo pero distinta → 401", async () => {
+    const r = await pedir("/loans", "u-ana", { clave: "clave-tesx" });
+    assert.equal(r.status, 401);
+  });
+
+  test("crearApp sin gatewayKey falla al arrancar", () => {
+    assert.throws(() => crearApp({ repo: crearRepositorioEnMemoria(HOY), core, gatewayKey: "", log: () => {} }), /GATEWAY_KEY/);
+  });
+
   test("sin X-User-Id → 401", async () => {
     assert.equal((await pedir("/books", null)).status, 401);
   });

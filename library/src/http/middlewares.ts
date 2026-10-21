@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { ErrorRequestHandler, RequestHandler } from "express";
 import { ZodError } from "zod";
 import { CoreNoDisponible } from "../integracion/core.js";
@@ -17,12 +17,17 @@ export const correlacion = (log: (l: string) => void): RequestHandler => (req, r
   next();
 };
 
-export const claveGateway = (clave: string): RequestHandler => (req, res, next) => {
-  if (req.header("x-gateway-key") !== clave) {
+export const claveGateway = (clave: string): RequestHandler => {
+  if (!clave) throw new Error("Falta GATEWAY_KEY: la Biblioteca no arranca sin clave de Gateway.");
+  const esperada = Buffer.from(clave);
+  return (req, res, next) => {
+  const recibida = Buffer.from(req.header("x-gateway-key") ?? "");
+  if (recibida.length !== esperada.length || !timingSafeEqual(recibida, esperada)) {
     res.status(401).json({ code: "GATEWAY_REQUIRED", message: "Las solicitudes deben pasar por el Gateway." });
     return;
   }
   next();
+  };
 };
 
 /** Roles del Gateway ("student", "librarian" o lista separada por comas) -> rol interno. */

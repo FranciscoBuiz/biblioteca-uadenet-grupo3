@@ -4,7 +4,7 @@
   "private": true,
   "workspaces": ["frontend", "library", "core"],
   "scripts": {
-    "dev": "concurrently -n frontend \"npm run dev -w @uadenet/frontend\"",
+    "dev": "concurrently -n frontend,core,library -c cyan,green,magenta \"npm run dev -w @uadenet/frontend\" \"npm run dev -w @uadenet/core\" \"npm run dev -w @uadenet/library\"",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
