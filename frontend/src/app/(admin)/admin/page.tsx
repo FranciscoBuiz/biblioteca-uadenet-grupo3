@@ -12,8 +12,10 @@ import {
   nombreSede,
 } from "@/lib/domain/rules";
 import type { Activity, TipoActividad } from "@/lib/domain/types";
-import { useDb } from "@/lib/store/LibraryProvider";
-import { indicadores, prestamosVencidos } from "@/lib/store/selectors";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { getIndicadores } from "@/lib/api/books";
+import { getActividad, getLoans } from "@/lib/api/loans";
+import { useApi } from "@/lib/api/useApi";
 
 /* ---------------------------------------------------------------
    Pantalla 14: panel del bibliotecario.
@@ -27,9 +29,13 @@ import { indicadores, prestamosVencidos } from "@/lib/store/selectors";
    --------------------------------------------------------------- */
 
 export default function PanelBibliotecario() {
-  const db = useDb();
-  const totales = indicadores(db);
-  const vencidos = prestamosVencidos(db);
+  const indicadoresApi = useApi(() => getIndicadores(), []);
+  const vencidosApi = useApi(() => getLoans({ estado: "vencidos" }), []);
+  const actividadApi = useApi(() => getActividad(), []);
+
+  const totales = indicadoresApi.datos;
+  const vencidos = vencidosApi.datos;
+  const actividad = actividadApi.datos ?? [];
 
   return (
     <>
@@ -39,6 +45,10 @@ export default function PanelBibliotecario() {
       />
 
       <Contenido>
+        {!totales || !vencidos ? (
+          <SinDatos error={indicadoresApi.error ?? vencidosApi.error} />
+        ) : (
+          <>
         <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 xl:grid-cols-5">
           <StatCard label="Títulos" valor={totales.titulos} pie="En catálogo" />
           <StatCard
@@ -122,19 +132,21 @@ export default function PanelBibliotecario() {
 
           <Card>
             <h2 className="text-[15px] font-semibold">Actividad reciente</h2>
-            {db.actividad.length === 0 ? (
+            {actividad.length === 0 ? (
               <p className="mt-3 text-[13px] text-tenue">
                 Todavía no hay movimientos registrados.
               </p>
             ) : (
               <ul className="mt-3.5 flex flex-col gap-3.5">
-                {db.actividad.slice(0, 6).map((entrada) => (
+                {actividad.slice(0, 6).map((entrada) => (
                   <FilaActividad key={entrada.id} actividad={entrada} />
                 ))}
               </ul>
             )}
           </Card>
         </div>
+          </>
+        )}
       </Contenido>
     </>
   );

@@ -10,7 +10,9 @@ import { Campo } from "@/components/ui/Form";
 import { EstadoPrestamoPill } from "@/components/ui/StatusPill";
 import { Mono, SinResultados } from "@/components/ui/Tabla";
 import { mensajeDeError } from "@/lib/api/errors";
-import { returnLoan } from "@/lib/api/loans";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { getLoans, returnLoan } from "@/lib/api/loans";
+import { useApi } from "@/lib/api/useApi";
 import {
   DIAS_PARA_SANCION,
   enDias,
@@ -20,8 +22,6 @@ import {
   nombreSede,
 } from "@/lib/domain/rules";
 import type { LoanView, Penalty } from "@/lib/domain/types";
-import { useDb } from "@/lib/store/LibraryProvider";
-import { filtrarPrestamos } from "@/lib/store/selectors";
 
 /* ---------------------------------------------------------------
    Pantalla 21: mostrador de devolucion fisica.
@@ -54,7 +54,6 @@ interface Registrada {
 }
 
 function Mostrador() {
-  const db = useDb();
   const searchParams = useSearchParams();
 
   // El panel del bibliotecario linkea acá con ?q={id del préstamo}.
@@ -67,9 +66,11 @@ function Mostrador() {
   const texto = q.trim();
 
   // Sin dato ingresado no se lista nada: es un mostrador, no un listado.
-  const resultados = texto
-    ? filtrarPrestamos(db, { q: texto, estado: "activos" })
-    : [];
+  const busqueda = useApi(
+    () => (texto ? getLoans({ q: texto, estado: "activos" }) : Promise.resolve([])),
+    [texto],
+  );
+  const resultados = busqueda.datos ?? [];
 
   const elegido = resultados.find((p) => p.id === seleccionado) ?? null;
 
@@ -125,6 +126,8 @@ function Mostrador() {
               <p className="py-6 text-center text-[13px] text-apagado">
                 Escribí un dato del estudiante o del préstamo para empezar.
               </p>
+            ) : !busqueda.datos ? (
+              <SinDatos error={busqueda.error} />
             ) : resultados.length === 0 ? (
               <SinResultados
                 titulo="Sin préstamos activos"

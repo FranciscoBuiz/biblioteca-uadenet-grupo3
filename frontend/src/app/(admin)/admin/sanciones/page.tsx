@@ -8,12 +8,9 @@ import { BarraFiltros, Buscador, Tabs } from "@/components/ui/Filtros";
 import { EstadoSancionPill } from "@/components/ui/StatusPill";
 import { CeldaDoble, Mono, SinResultados, TablaDatos } from "@/components/ui/Tabla";
 import { formatFecha, formatMonto } from "@/lib/domain/rules";
-import { useDb } from "@/lib/store/LibraryProvider";
-import {
-  filtrarSanciones,
-  sanciones,
-  type FiltroSanciones,
-} from "@/lib/store/selectors";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { getPenalties, type FiltroSanciones } from "@/lib/api/penalties";
+import { useApi } from "@/lib/api/useApi";
 
 /* ---------------------------------------------------------------
    Pantalla 22: sanciones y multas.
@@ -26,14 +23,21 @@ import {
 type Estado = NonNullable<FiltroSanciones["estado"]>;
 
 export default function SancionesAdmin() {
-  const db = useDb();
   const [q, setQ] = useState("");
   const [estado, setEstado] = useState<Estado>("todas");
 
-  const todas = sanciones(db);
-  const filtradas = filtrarSanciones(db, { q, estado });
-  const contar = (filtro: Estado) =>
-    filtrarSanciones(db, { q, estado: filtro }).length;
+  // Totales de las tarjetas: sin busqueda. Lista y pestanas: con busqueda.
+  const global = useApi(() => getPenalties(), []);
+  const busqueda = useApi(() => getPenalties({ q }), [q]);
+
+  const todas = global.datos ?? [];
+  const encontradas = busqueda.datos ?? [];
+  const cumple = (s: { estado: string }, filtro: Estado) =>
+    filtro === "todas" ||
+    (filtro === "cobradas" && s.estado === "cobrada") ||
+    (filtro === "pendientes" && s.estado === "pendiente");
+  const filtradas = encontradas.filter((s) => cumple(s, estado));
+  const contar = (filtro: Estado) => encontradas.filter((s) => cumple(s, filtro)).length;
 
   const pendientes = todas.filter((s) => s.estado === "pendiente");
   const aCobrar = pendientes.reduce((total, s) => total + s.monto, 0);
@@ -95,6 +99,11 @@ export default function SancionesAdmin() {
           />
         </div>
 
+        {!busqueda.datos || !global.datos ? (
+          <div className="mt-4">
+            <SinDatos error={busqueda.error ?? global.error} />
+          </div>
+        ) : (
         <Card padding={false} className="mt-4">
           <TablaDatos
             etiqueta="Sanciones del sistema"
@@ -182,6 +191,7 @@ export default function SancionesAdmin() {
             ]}
           />
         </Card>
+        )}
       </Contenido>
     </>
   );

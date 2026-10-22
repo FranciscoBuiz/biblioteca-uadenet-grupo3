@@ -8,8 +8,10 @@ import { BarraFiltros, Buscador, Tabs } from "@/components/ui/Filtros";
 import { EstadoPrestamoPill } from "@/components/ui/StatusPill";
 import { CeldaDoble, Mono, SinResultados, TablaDatos } from "@/components/ui/Tabla";
 import { detalleEstadoPrestamo, formatFecha, nombreSede } from "@/lib/domain/rules";
-import { useDb } from "@/lib/store/LibraryProvider";
-import { filtrarPrestamos, type FiltroPrestamos } from "@/lib/store/selectors";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { getLoans, type FiltroPrestamos } from "@/lib/api/loans";
+import { useApi } from "@/lib/api/useApi";
+import type { LoanView } from "@/lib/domain/types";
 
 /* ---------------------------------------------------------------
    Pantalla 20: gestion de prestamos.
@@ -21,12 +23,20 @@ import { filtrarPrestamos, type FiltroPrestamos } from "@/lib/store/selectors";
 type Estado = NonNullable<FiltroPrestamos["estado"]>;
 
 export default function PrestamosAdmin() {
-  const db = useDb();
   const [q, setQ] = useState("");
   const [estado, setEstado] = useState<Estado>("activos");
 
-  const filtrados = filtrarPrestamos(db, { q, estado });
-  const contar = (filtro: Estado) => filtrarPrestamos(db, { q, estado: filtro }).length;
+  // Se pide la busqueda completa y las pestanas se resuelven aca, asi los
+  // contadores de todas salen de una sola respuesta.
+  const { datos, error } = useApi(() => getLoans({ q }), [q]);
+  const cumple = (p: LoanView, filtro: Estado) =>
+    filtro === "todos" ||
+    (filtro === "activos" && !p.fechaDevolucion) ||
+    (filtro === "vencidos" && !p.fechaDevolucion && p.diasAtraso > 0) ||
+    (filtro === "devueltos" && p.fechaDevolucion !== null);
+  const todos = datos ?? [];
+  const filtrados = todos.filter((p) => cumple(p, estado));
+  const contar = (filtro: Estado) => todos.filter((p) => cumple(p, filtro)).length;
 
   return (
     <>
@@ -57,6 +67,11 @@ export default function PrestamosAdmin() {
           />
         </div>
 
+        {!datos ? (
+          <div className="mt-4">
+            <SinDatos error={error} />
+          </div>
+        ) : (
         <Card padding={false} className="mt-4">
           <TablaDatos
             etiqueta="Préstamos del sistema"
@@ -145,6 +160,7 @@ export default function PrestamosAdmin() {
             ]}
           />
         </Card>
+        )}
       </Contenido>
     </>
   );

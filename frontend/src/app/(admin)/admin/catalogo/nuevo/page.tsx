@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Cabecera, Contenido } from "@/components/shell/Cabecera";
 import { Card } from "@/components/ui/Card";
 import { createBook } from "@/lib/api/books";
-import { useDb } from "@/lib/store/LibraryProvider";
+import { useSedeActiva } from "@/lib/sedeActiva";
 import {
   CATEGORIA_INICIAL,
   FormularioLibro,
@@ -20,7 +20,7 @@ import {
 
 export default function AltaDeLibro() {
   const router = useRouter();
-  const db = useDb();
+  const sedeActiva = useSedeActiva();
 
   async function guardar(datos: DatosLibro) {
     await createBook({
@@ -61,7 +61,7 @@ export default function AltaDeLibro() {
               editorial: "",
               anio: "",
               categoria: CATEGORIA_INICIAL,
-              sede: db.sedeActiva,
+              sede: sedeActiva,
               cantidad: "1",
               descripcion: "",
             }}

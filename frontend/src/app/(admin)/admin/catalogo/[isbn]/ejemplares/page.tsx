@@ -8,12 +8,13 @@ import { Aviso, Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Campo, CampoSelect } from "@/components/ui/Form";
 import { EstadoEjemplarPill } from "@/components/ui/StatusPill";
 import { Mono, SinResultados, TablaDatos } from "@/components/ui/Tabla";
-import { addCopies } from "@/lib/api/books";
+import { addCopies, getBook, getCopies } from "@/lib/api/books";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { useApi } from "@/lib/api/useApi";
+import { useSedeActiva } from "@/lib/sedeActiva";
 import { mensajeDeError } from "@/lib/api/errors";
 import { nombreSede, SEDES, validarCantidad } from "@/lib/domain/rules";
 import type { SedeId } from "@/lib/domain/types";
-import { useDb } from "@/lib/store/LibraryProvider";
-import { buscarLibro, ejemplaresDe } from "@/lib/store/selectors";
 
 /* ---------------------------------------------------------------
    Pantalla 18: ejemplares del titulo.
@@ -25,17 +26,26 @@ import { buscarLibro, ejemplaresDe } from "@/lib/store/selectors";
 
 export default function EjemplaresDelTitulo() {
   const { isbn } = useParams<{ isbn: string }>();
-  const db = useDb();
+  const sedeActiva = useSedeActiva();
 
-  const libro = buscarLibro(db, isbn);
-  const ejemplares = ejemplaresDe(db, isbn);
+  const { datos: libro, error: errorLibro, cargando } = useApi(() => getBook(isbn), [isbn]);
+  const { datos: copias } = useApi(() => getCopies(isbn), [isbn]);
+  const ejemplares = [...(copias ?? [])].sort((a, b) => a.codigo.localeCompare(b.codigo));
 
-  const [sede, setSede] = useState<SedeId>(db.sedeActiva);
+  const [sede, setSede] = useState<SedeId>(sedeActiva);
   const [cantidad, setCantidad] = useState("1");
   const [errorCantidad, setErrorCantidad] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+
+  if (!libro && (cargando || errorLibro)) {
+    return (
+      <Contenido ancho="angosto">
+        <SinDatos error={errorLibro} />
+      </Contenido>
+    );
+  }
 
   if (!libro) {
     return (

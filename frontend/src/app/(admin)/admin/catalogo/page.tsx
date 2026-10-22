@@ -8,12 +8,12 @@ import { BarraFiltros, Buscador, SelectPill } from "@/components/ui/Filtros";
 import { Modal } from "@/components/ui/Modal";
 import { CategoriaPill, Pill } from "@/components/ui/StatusPill";
 import { Mono, SinResultados, TablaDatos } from "@/components/ui/Tabla";
-import { setBookActivo } from "@/lib/api/books";
+import { getBooks, setBookActivo } from "@/lib/api/books";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { useApi } from "@/lib/api/useApi";
 import { mensajeDeError } from "@/lib/api/errors";
 import { SEDES } from "@/lib/domain/rules";
 import type { BookWithStock, SedeId } from "@/lib/domain/types";
-import { useDb } from "@/lib/store/LibraryProvider";
-import { librosConStock } from "@/lib/store/selectors";
 
 /* ---------------------------------------------------------------
    Pantalla 15: gestion de catalogo.
@@ -26,36 +26,21 @@ import { librosConStock } from "@/lib/store/selectors";
 type FiltroSede = SedeId | "todas";
 
 export default function GestionCatalogo() {
-  const db = useDb();
-
   const [q, setQ] = useState("");
   const [sede, setSede] = useState<FiltroSede>("todas");
   const [error, setError] = useState<string | null>(null);
   const [aConfirmar, setAConfirmar] = useState<BookWithStock | null>(null);
   const [procesando, setProcesando] = useState<string | null>(null);
 
-  const texto = q.trim().toLowerCase();
-
   // Se listan tambien los titulos inactivos: esta pantalla es la que
-  // permite reactivarlos, asi que no se filtran por `activo`.
-  const libros = librosConStock(db).filter((libro) => {
-    const coincideTexto =
-      !texto ||
-      libro.titulo.toLowerCase().includes(texto) ||
-      libro.autor.toLowerCase().includes(texto) ||
-      libro.isbn.includes(texto);
-
-    const coincideSede =
-      sede === "todas" ||
-      db.ejemplares.some(
-        (ejemplar) =>
-          ejemplar.isbn === libro.isbn &&
-          ejemplar.sede === sede &&
-          ejemplar.estado !== "baja",
-      );
-
-    return coincideTexto && coincideSede;
-  });
+  // permite reactivarlos.
+  const { datos, error: errorCarga } = useApi(
+    () => getBooks({ q, incluirInactivos: true }),
+    [q],
+  );
+  // El backend no filtra titulos por sede (solo cuenta stock), asi que se
+  // acota aca a los que tienen ejemplares libres en la sede elegida.
+  const libros = (datos ?? []).filter((l) => sede === "todas" || l.porSede[sede] > 0);
 
   /** Baja logica del titulo, una vez confirmada en el modal. */
   async function darDeBaja(libro: BookWithStock) {
@@ -123,6 +108,9 @@ export default function GestionCatalogo() {
         )}
 
         <div className="mt-4">
+          {!datos ? (
+            <SinDatos error={errorCarga} />
+          ) : (
           <Card padding={false}>
             <TablaDatos
               etiqueta="Títulos del catálogo"
@@ -230,6 +218,7 @@ export default function GestionCatalogo() {
               ]}
             />
           </Card>
+          )}
         </div>
       </Contenido>
 

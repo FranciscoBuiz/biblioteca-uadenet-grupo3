@@ -6,9 +6,10 @@ import { Cabecera, Contenido } from "@/components/shell/Cabecera";
 import { BotonLink } from "@/components/ui/Boton";
 import { Aviso, Card } from "@/components/ui/Card";
 import { SinResultados } from "@/components/ui/Tabla";
-import { updateBook } from "@/lib/api/books";
-import { useDb } from "@/lib/store/LibraryProvider";
-import { buscarLibro } from "@/lib/store/selectors";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { getBook, updateBook } from "@/lib/api/books";
+import { useApi } from "@/lib/api/useApi";
+import { useSedeActiva } from "@/lib/sedeActiva";
 import { FormularioLibro, type DatosLibro } from "../../FormularioLibro";
 
 /* ---------------------------------------------------------------
@@ -22,9 +23,17 @@ import { FormularioLibro, type DatosLibro } from "../../FormularioLibro";
 export default function EditarLibro() {
   const { isbn } = useParams<{ isbn: string }>();
   const router = useRouter();
-  const db = useDb();
+  const sedeActiva = useSedeActiva();
 
-  const libro = buscarLibro(db, isbn);
+  const { datos: libro, error, cargando } = useApi(() => getBook(isbn), [isbn]);
+
+  if (!libro && (cargando || error)) {
+    return (
+      <Contenido ancho="angosto">
+        <SinDatos error={error} />
+      </Contenido>
+    );
+  }
 
   if (!libro) {
     return (
@@ -90,7 +99,7 @@ export default function EditarLibro() {
               editorial: libro.editorial,
               anio: String(libro.anio),
               categoria: libro.categoria,
-              sede: db.sedeActiva,
+              sede: sedeActiva,
               cantidad: "1",
               descripcion: libro.descripcion,
             }}

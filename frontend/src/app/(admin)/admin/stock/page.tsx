@@ -7,12 +7,13 @@ import { Aviso, Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Buscador, Tabs } from "@/components/ui/Filtros";
 import { Pill } from "@/components/ui/StatusPill";
 import { Mono, SinResultados } from "@/components/ui/Tabla";
-import { setCopyEstado } from "@/lib/api/books";
+import { getBooks, getCopies, getIndicadores, setCopyEstado } from "@/lib/api/books";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { useApi } from "@/lib/api/useApi";
+import { useSedeActiva } from "@/lib/sedeActiva";
 import { mensajeDeError } from "@/lib/api/errors";
 import { nombreSede, SEDES } from "@/lib/domain/rules";
 import type { Copy, EstadoEjemplar, SedeId } from "@/lib/domain/types";
-import { useDb } from "@/lib/store/LibraryProvider";
-import { indicadores } from "@/lib/store/selectors";
 
 /* ---------------------------------------------------------------
    Pantalla 19: stock y ejemplares por sede.
@@ -33,20 +34,29 @@ const ESTADO: Record<EstadoEjemplar, { etiqueta: string; clases: string }> = {
 };
 
 export default function StockPorSede() {
-  const db = useDb();
-  const [sede, setSede] = useState<Filtro>(db.sedeActiva);
+  const sedeActiva = useSedeActiva();
+  const [sede, setSede] = useState<Filtro>(sedeActiva);
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const stats = indicadores(db, sede);
-  const texto = q.trim().toLowerCase();
+  const statsApi = useApi(() => getIndicadores(sede), [sede]);
+  const stats = statsApi.datos;
 
-  // Un grupo por titulo que tenga al menos un ejemplar en la sede elegida.
-  const grupos = db.libros
-    .map((libro) => ({
+  // Un grupo por titulo con sus ejemplares; no hay endpoint que traiga todo
+  // junto, asi que se pide el listado de copias de cada titulo.
+  const gruposApi = useApi(async () => {
+    const libros = await getBooks({ incluirInactivos: true });
+    return Promise.all(
+      libros.map(async (libro) => ({ libro, ejemplares: await getCopies(libro.isbn) })),
+    );
+  }, []);
+
+  const texto = q.trim().toLowerCase();
+  const grupos = (gruposApi.datos ?? [])
+    .map(({ libro, ejemplares }) => ({
       libro,
-      ejemplares: db.ejemplares
-        .filter((e) => e.isbn === libro.isbn && (sede === "todas" || e.sede === sede))
+      ejemplares: ejemplares
+        .filter((e) => sede === "todas" || e.sede === sede)
         .sort((a, b) => a.codigo.localeCompare(b.codigo)),
     }))
     .filter((grupo) => grupo.ejemplares.length > 0)
@@ -58,10 +68,10 @@ export default function StockPorSede() {
         grupo.ejemplares.some((e) => e.codigo.toLowerCase().includes(texto)),
     );
 
-  async function cambiarEstado(codigo: string, estado: EstadoEjemplar) {
+  async function cambiarEstado(isbn: string, codigo: string, estado: EstadoEjemplar) {
     setError(null);
     try {
-      await setCopyEstado(codigo, estado);
+      await setCopyEstado(isbn, codigo, estado);
     } catch (e) {
       setError(mensajeDeError(e));
     }
@@ -88,6 +98,11 @@ export default function StockPorSede() {
           ]}
         />
 
+        {!stats ? (
+          <div className="mt-4">
+            <SinDatos error={statsApi.error} />
+          </div>
+        ) : (
         <div className="mt-4 grid grid-cols-2 gap-3.5 sm:grid-cols-3 xl:grid-cols-5">
           <StatCard label="Total" valor={stats.ejemplares} pie="Ejemplares físicos" />
           <StatCard
@@ -104,6 +119,7 @@ export default function StockPorSede() {
             pie="Fuera de circulación"
           />
         </div>
+        )}
 
         {error && (
           <div className="mt-4">
@@ -136,7 +152,11 @@ export default function StockPorSede() {
             }
           />
 
-          {grupos.length === 0 ? (
+          {!gruposApi.datos ? (
+            <div className="px-5 py-10">
+              <SinDatos error={gruposApi.error} />
+            </div>
+          ) : grupos.length === 0 ? (
             <div className="px-5 py-10">
               <SinResultados
                 titulo="No hay ejemplares en esta sede"
@@ -204,7 +224,7 @@ function ChipEjemplar({
 }: {
   ejemplar: Copy;
   mostrarSede: boolean;
-  onCambiar: (codigo: string, estado: EstadoEjemplar) => void;
+  onCambiar: (isbn: string, codigo: string, estado: EstadoEjemplar) => void;
 }) {
   const { etiqueta, clases } = ESTADO[ejemplar.estado];
   const bloqueado = ejemplar.estado === "prestado";
@@ -227,7 +247,7 @@ function ChipEjemplar({
           <select
             value={ejemplar.estado}
             onChange={(e) =>
-              onCambiar(ejemplar.codigo, e.target.value as EstadoEjemplar)
+              onCambiar(ejemplar.isbn, ejemplar.codigo, e.target.value as EstadoEjemplar)
             }
             className={`cursor-pointer appearance-none rounded-full px-2.5 py-1 text-[11px] font-semibold ${clases}`}
           >
