@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { markAllRead } from "@/lib/api/notifications";
+import { Aviso } from "@/components/ui/Card";
+import { getNotifications, markAllRead } from "@/lib/api/notifications";
+import { useApi } from "@/lib/api/useApi";
 import { formatFecha } from "@/lib/domain/rules";
 import type { Notification, TipoNotificacion } from "@/lib/domain/types";
-import { useDb } from "@/lib/store/LibraryProvider";
-import { notificacionesDe, sinLeer } from "@/lib/store/selectors";
 
 /* ---------------------------------------------------------------
    Pantalla 12: desplegable de notificaciones del header, disponible
@@ -20,13 +20,13 @@ const PUNTO: Record<TipoNotificacion, string> = {
   comprobante: "bg-secundario",
 };
 
-export function BotonNotificaciones({ userId }: { userId: string }) {
-  const db = useDb();
+export function BotonNotificaciones() {
   const [abierto, setAbierto] = useState(false);
   const contenedor = useRef<HTMLDivElement>(null);
 
-  const notificaciones = notificacionesDe(db, userId);
-  const noLeidas = sinLeer(db, userId);
+  const { datos, error } = useApi(() => getNotifications(), []);
+  const notificaciones = datos ?? [];
+  const noLeidas = notificaciones.filter((n) => !n.leida).length;
 
   useEffect(() => {
     if (!abierto) return;
@@ -77,7 +77,7 @@ export function BotonNotificaciones({ userId }: { userId: string }) {
             {noLeidas > 0 && (
               <button
                 type="button"
-                onClick={() => markAllRead(userId)}
+                onClick={() => markAllRead()}
                 className="text-xs font-semibold text-secundario hover:text-institucional"
               >
                 Marcar leídas
@@ -85,7 +85,13 @@ export function BotonNotificaciones({ userId }: { userId: string }) {
             )}
           </div>
 
-          {notificaciones.length === 0 ? (
+          {error ? (
+            <div className="p-3">
+              <Aviso tono="error">{error}</Aviso>
+            </div>
+          ) : !datos ? (
+            <p className="px-4 py-8 text-center text-[13px] text-tenue">Cargando…</p>
+          ) : notificaciones.length === 0 ? (
             <p className="px-4 py-8 text-center text-[13px] text-tenue">
               No tenés notificaciones.
             </p>

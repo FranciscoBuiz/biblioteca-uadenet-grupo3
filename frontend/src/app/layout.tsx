@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Hanken_Grotesk, Libre_Caslon_Text } from "next/font/google";
-import { LibraryProvider } from "@/lib/store/LibraryProvider";
+import { SesionProvider } from "@/lib/api/sesion";
 import "./globals.css";
 
 /* ---------------------------------------------------------------
@@ -36,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${caslon.variable} ${hanken.variable}`}>
       <body>
-        <LibraryProvider>{children}</LibraryProvider>
+        <SesionProvider>{children}</SesionProvider>
       </body>
     </html>
   );

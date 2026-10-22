@@ -15,8 +15,11 @@ import {
   nombreSede,
 } from "@/lib/domain/rules";
 import type { PenaltyView, SedeId } from "@/lib/domain/types";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
-import { prestamosDe, sancionesDe } from "@/lib/store/selectors";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { getLoan } from "@/lib/api/loans";
+import { getPenalty } from "@/lib/api/penalties";
+import { useUsuarioActual } from "@/lib/api/sesion";
+import { useApi } from "@/lib/api/useApi";
 
 /* ---------------------------------------------------------------
    Pantalla 09: ficha de la sancion por devolucion tardia, con el
@@ -25,13 +28,15 @@ import { prestamosDe, sancionesDe } from "@/lib/store/selectors";
 
 export default function DetalleSancion() {
   const { id } = useParams<{ id: string }>();
-  const db = useDb();
   const usuario = useUsuarioActual();
 
-  const sancion = sancionesDe(db, usuario.id).find((s) => s.id === id) ?? null;
-  const prestamo = sancion
-    ? (prestamosDe(db, usuario.id).find((p) => p.id === sancion.loanId) ?? null)
-    : null;
+  const { datos: sancion, error, cargando } = useApi(() => getPenalty(id), [id]);
+  const loanId = sancion?.loanId;
+  // La sede viene del prestamo; si no carga, la ficha cae en la sede del usuario.
+  const { datos: prestamo } = useApi(
+    () => (loanId ? getLoan(loanId) : Promise.resolve(null)),
+    [loanId],
+  );
 
   return (
     <>
@@ -43,11 +48,13 @@ export default function DetalleSancion() {
         ]}
         titulo="Detalle de sanción"
       >
-        <BotonNotificaciones userId={usuario.id} />
+        <BotonNotificaciones />
       </Cabecera>
 
       <Contenido ancho="angosto">
-        {!sancion ? (
+        {!sancion && (cargando || error) ? (
+          <SinDatos error={error} />
+        ) : !sancion ? (
           <Card>
             <SinResultados
               titulo="No encontramos esa sanción"

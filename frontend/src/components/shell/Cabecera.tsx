@@ -4,8 +4,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { SEDES } from "@/lib/domain/rules";
 import type { SedeId } from "@/lib/domain/types";
-import { mutar } from "@/lib/store/db";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
+import { useUsuarioActual } from "@/lib/api/sesion";
+import { elegirSede, useSedeActiva } from "@/lib/sedeActiva";
 import { useDrawer } from "./AppShell";
 
 /* ---------------------------------------------------------------
@@ -103,16 +103,14 @@ function BotonMenu() {
 
 /** Pill "Sede: Monserrat" del mockup, convertida en selector real. */
 export function SelectorSede() {
-  const db = useDb();
+  const sedeActiva = useSedeActiva();
 
   return (
     <label className="relative hidden shrink-0 sm:block">
       <span className="sr-only">Sede activa</span>
       <select
-        value={db.sedeActiva}
-        onChange={(e) =>
-          mutar(() => ({ sedeActiva: e.target.value as SedeId }))
-        }
+        value={sedeActiva}
+        onChange={(e) => elegirSede(e.target.value as SedeId)}
         className="cursor-pointer appearance-none rounded-full border border-borde-fuerte bg-white py-2 pl-4 pr-8 text-[13px] text-grafito hover:border-secundario"
       >
         {SEDES.map((sede) => (

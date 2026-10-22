@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Cabecera, Contenido } from "@/components/shell/Cabecera";
 import { BotonNotificaciones } from "@/components/shell/PanelNotificaciones";
 import { Boton, BotonLink } from "@/components/ui/Boton";
@@ -10,7 +10,9 @@ import { Modal } from "@/components/ui/Modal";
 import { Portada } from "@/components/ui/Portada";
 import { CategoriaPill, Disponibilidad, Pill } from "@/components/ui/StatusPill";
 import { Mono, SinResultados } from "@/components/ui/Tabla";
+import { getBook } from "@/lib/api/books";
 import { createLoan } from "@/lib/api/loans";
+import { useApi } from "@/lib/api/useApi";
 import { mensajeDeError } from "@/lib/api/errors";
 import {
   calcularFechaLimite,
@@ -22,8 +24,7 @@ import {
   SEDES,
 } from "@/lib/domain/rules";
 import type { SedeId } from "@/lib/domain/types";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
-import { buscarLibro, ejemplaresDe } from "@/lib/store/selectors";
+import { useSedeActiva } from "@/lib/sedeActiva";
 
 /* ---------------------------------------------------------------
    Pantallas 04 y 05: ficha del libro y modal de confirmacion.
@@ -40,8 +41,6 @@ interface FilaSede {
   ciudad: string;
   /** Domicilio de la sede; no todas lo tienen cargado. */
   direccion?: string;
-  /** Ejemplares vigentes del titulo en la sede. */
-  totales: number;
   /** Ejemplares libres en la sede. */
   libres: number;
 }
@@ -49,48 +48,40 @@ interface FilaSede {
 export default function DetalleLibro() {
   const { isbn } = useParams<{ isbn: string }>();
   const router = useRouter();
-  const usuario = useUsuarioActual();
-  const db = useDb();
+  const sedeActiva = useSedeActiva();
+  const { datos: libro, error: errorCarga, cargando } = useApi(() => getBook(isbn), [isbn]);
 
-  const libro = buscarLibro(db, isbn);
+  // El backend informa solo los ejemplares libres por sede (los totales
+  // son un dato del bibliotecario), asi que la tabla muestra esos.
+  const porSede: FilaSede[] = SEDES.map((s) => ({
+    sede: s.id,
+    nombre: s.nombre,
+    ciudad: s.ciudad,
+    direccion: s.direccion,
+    libres: libro?.porSede[s.id] ?? 0,
+  }));
 
-  const porSede = useMemo<FilaSede[]>(() => {
-    const vigentes = ejemplaresDe(db, isbn).filter((e) => e.estado !== "baja");
-
-    return SEDES.map((sede) => {
-      const propios = vigentes.filter((e) => e.sede === sede.id);
-      return {
-        sede: sede.id,
-        nombre: sede.nombre,
-        ciudad: sede.ciudad,
-        direccion: sede.direccion,
-        totales: propios.length,
-        libres: propios.filter((e) => e.estado === "disponible").length,
-      };
-    }).filter((fila) => fila.totales > 0);
-  }, [db, isbn]);
-
-  // Arrancamos en la sede del header; si ahi no hay ningun ejemplar del
-  // titulo, caemos en la primera sede que si lo tenga.
-  const [sede, setSede] = useState<SedeId>(() =>
-    porSede.some((f) => f.sede === db.sedeActiva)
-      ? db.sedeActiva
-      : (porSede[0]?.sede ?? db.sedeActiva),
-  );
+  // Arrancamos en la sede del header hasta que el usuario elija otra.
+  const [sede, setSede] = useState<SedeId | null>(null);
 
   const [abierto, setAbierto] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  // Si el estado quedo en una sede que este titulo no tiene (p. ej. al
-  // navegar de una ficha a otra), caemos en la primera sede con ejemplares.
-  const sedeElegida = porSede.some((f) => f.sede === sede)
-    ? sede
-    : (porSede[0]?.sede ?? sede);
+  const sedeElegida = sede ?? sedeActiva;
 
   const libres = porSede.find((f) => f.sede === sedeElegida)?.libres ?? 0;
 
   if (!libro) {
+    if (cargando) {
+      return (
+        <Contenido>
+          <p className="text-[13px] text-tenue" role="status">
+            Cargando…
+          </p>
+        </Contenido>
+      );
+    }
     return (
       <>
         <Cabecera
@@ -101,15 +92,19 @@ export default function DetalleLibro() {
           ]}
           titulo="Detalle del libro"
         >
-          <BotonNotificaciones userId={usuario.id} />
+          <BotonNotificaciones />
         </Cabecera>
 
         <Contenido ancho="angosto">
           <Card padding={false} className="px-5 py-12">
-            <SinResultados
-              titulo="No encontramos ese título"
-              detalle={`No hay ningún libro con el ISBN ${isbn} en el catálogo.`}
-            />
+            {errorCarga ? (
+              <Aviso tono="error">{errorCarga}</Aviso>
+            ) : (
+              <SinResultados
+                titulo="No encontramos ese título"
+                detalle={`No hay ningún libro con el ISBN ${isbn} en el catálogo.`}
+              />
+            )}
             <div className="mt-5 flex justify-center">
               <BotonLink href="/catalogo" variante="avanzar" tamano="chico">
                 Volver al catálogo
@@ -137,7 +132,7 @@ export default function DetalleLibro() {
     setEnviando(true);
 
     try {
-      const prestamo = await createLoan(isbn, sedeElegida, usuario.id);
+      const prestamo = await createLoan(isbn, sedeElegida);
       router.push(`/comprobante/${prestamo.id}`);
     } catch (e) {
       // El modal queda abierto con el motivo (sanción pendiente, sin stock...).
@@ -156,7 +151,7 @@ export default function DetalleLibro() {
         ]}
         titulo="Detalle del libro"
       >
-        <BotonNotificaciones userId={usuario.id} />
+        <BotonNotificaciones />
       </Cabecera>
 
       <Contenido>
@@ -233,8 +228,8 @@ export default function DetalleLibro() {
                           </span>
                         </span>
                         <span className="text-xs text-tenue">
-                          {fila.libres} de {fila.totales}{" "}
-                          {fila.totales === 1 ? "ejemplar libre" : "ejemplares libres"}
+                          {fila.libres}{" "}
+                          {fila.libres === 1 ? "ejemplar libre" : "ejemplares libres"}
                         </span>
                         <Pill tono={fila.libres > 0 ? "verde" : "gris"}>
                           {fila.libres > 0 ? "Disponible" : "Sin stock"}

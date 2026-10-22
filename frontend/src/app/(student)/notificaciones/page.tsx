@@ -10,12 +10,13 @@ import { Boton } from "@/components/ui/Boton";
 import { Card } from "@/components/ui/Card";
 import { Tabs, type Opcion } from "@/components/ui/Filtros";
 import { SinResultados } from "@/components/ui/Tabla";
-import { markAllRead } from "@/lib/api/notifications";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
+import { SinDatos } from "@/components/ui/SinDatos";
 import {
-  filtrarNotificaciones,
+  getNotifications,
+  markAllRead,
   type FiltroNotificaciones,
-} from "@/lib/store/selectors";
+} from "@/lib/api/notifications";
+import { useApi } from "@/lib/api/useApi";
 
 /* ---------------------------------------------------------------
    Pantalla 13: historial completo de notificaciones del estudiante.
@@ -45,13 +46,18 @@ const VACIO: Record<FiltroNotificaciones, { titulo: string; detalle: string }> =
   };
 
 export default function TodasLasNotificaciones() {
-  const db = useDb();
-  const usuario = useUsuarioActual();
   const [filtro, setFiltro] = useState<FiltroNotificaciones>("todas");
+  const { datos, error } = useApi(() => getNotifications(), []);
 
-  const todas = filtrarNotificaciones(db, usuario.id, "todas");
-  const sinLeer = filtrarNotificaciones(db, usuario.id, "sin_leer").length;
-  const visibles = filtrarNotificaciones(db, usuario.id, filtro);
+  const todas = datos ?? [];
+  const sinLeer = todas.filter((n) => !n.leida).length;
+  const visibles = todas.filter(
+    (n) =>
+      filtro === "todas" ||
+      (filtro === "sin_leer" && !n.leida) ||
+      (filtro === "vencimientos" && n.tipo === "vencimiento") ||
+      (filtro === "sanciones" && n.tipo === "sancion"),
+  );
 
   const opciones: Opcion<FiltroNotificaciones>[] = [
     { id: "todas", etiqueta: "Todas", cantidad: todas.length },
@@ -59,12 +65,12 @@ export default function TodasLasNotificaciones() {
     {
       id: "vencimientos",
       etiqueta: "Vencimientos",
-      cantidad: filtrarNotificaciones(db, usuario.id, "vencimientos").length,
+      cantidad: todas.filter((n) => n.tipo === "vencimiento").length,
     },
     {
       id: "sanciones",
       etiqueta: "Sanciones",
-      cantidad: filtrarNotificaciones(db, usuario.id, "sanciones").length,
+      cantidad: todas.filter((n) => n.tipo === "sancion").length,
     },
   ];
 
@@ -74,10 +80,14 @@ export default function TodasLasNotificaciones() {
         migas={[{ etiqueta: "Biblioteca" }, { etiqueta: "Notificaciones" }]}
         titulo="Todas las notificaciones"
       >
-        <BotonNotificaciones userId={usuario.id} />
+        <BotonNotificaciones />
       </Cabecera>
 
       <Contenido>
+        {!datos ? (
+          <SinDatos error={error} />
+        ) : (
+          <>
         <Tabs
           opciones={opciones}
           valor={filtro}
@@ -97,7 +107,7 @@ export default function TodasLasNotificaciones() {
                 <Boton
                   variante="texto"
                   tamano="chico"
-                  onClick={() => markAllRead(usuario.id)}
+                  onClick={() => markAllRead()}
                 >
                   Marcar todas como leídas
                 </Boton>
@@ -127,6 +137,8 @@ export default function TodasLasNotificaciones() {
             )}
           </Card>
         </div>
+          </>
+        )}
       </Contenido>
     </>
   );

@@ -14,8 +14,9 @@ import {
   formatMonto,
 } from "@/lib/domain/rules";
 import type { PenaltyView } from "@/lib/domain/types";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
-import { sancionesDe } from "@/lib/store/selectors";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { getPenalties } from "@/lib/api/penalties";
+import { useApi } from "@/lib/api/useApi";
 
 /* ---------------------------------------------------------------
    Listado de sanciones del estudiante (item "Sanciones" del menu).
@@ -49,11 +50,10 @@ const VACIO: Record<Filtro, { titulo: string; detalle: string }> = {
 };
 
 export default function MisSanciones() {
-  const db = useDb();
-  const usuario = useUsuarioActual();
   const [filtro, setFiltro] = useState<Filtro>("todas");
 
-  const mis = sancionesDe(db, usuario.id);
+  const { datos, error } = useApi(() => getPenalties(), []);
+  const mis = datos ?? [];
   const visibles = mis.filter((s) => cumple(s, filtro));
   const pendientes = mis.filter((s) => s.estado === "pendiente").length;
 
@@ -73,7 +73,7 @@ export default function MisSanciones() {
         migas={[{ etiqueta: "Biblioteca" }, { etiqueta: "Sanciones" }]}
         titulo="Sanciones y multas"
       >
-        <BotonNotificaciones userId={usuario.id} />
+        <BotonNotificaciones />
       </Cabecera>
 
       <Contenido>
@@ -87,6 +87,10 @@ export default function MisSanciones() {
           </div>
         )}
 
+        {!datos ? (
+          <SinDatos error={error} />
+        ) : (
+          <>
         <Tabs
           opciones={opciones}
           valor={filtro}
@@ -170,6 +174,8 @@ export default function MisSanciones() {
             />
           </Card>
         </div>
+          </>
+        )}
       </Contenido>
     </>
   );

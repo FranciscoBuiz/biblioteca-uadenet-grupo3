@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import type { Rol } from "@/lib/domain/types";
-import { useUsuario } from "@/lib/store/LibraryProvider";
+import { useUsuario } from "@/lib/api/sesion";
 import { AppShell } from "./AppShell";
 
 /* ---------------------------------------------------------------

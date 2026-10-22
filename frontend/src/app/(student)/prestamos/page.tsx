@@ -19,8 +19,9 @@ import {
   nombreSede,
 } from "@/lib/domain/rules";
 import type { LoanView } from "@/lib/domain/types";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
-import { prestamosDe } from "@/lib/store/selectors";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { getLoans } from "@/lib/api/loans";
+import { useApi } from "@/lib/api/useApi";
 
 /* ---------------------------------------------------------------
    Pantalla 07: seguimiento de los prestamos del estudiante.
@@ -60,11 +61,10 @@ const VACIO: Record<Filtro, { titulo: string; detalle: string }> = {
 };
 
 export default function MisPrestamos() {
-  const db = useDb();
-  const usuario = useUsuarioActual();
   const [filtro, setFiltro] = useState<Filtro>("todos");
 
-  const mis = prestamosDe(db, usuario.id);
+  const { datos, error } = useApi(() => getLoans(), []);
+  const mis = datos ?? [];
   const visibles = mis.filter((p) => cumple(p, filtro));
 
   const opciones: Opcion<Filtro>[] = [
@@ -80,10 +80,14 @@ export default function MisPrestamos() {
         migas={[{ etiqueta: "Biblioteca" }, { etiqueta: "Mis préstamos" }]}
         titulo="Mis préstamos"
       >
-        <BotonNotificaciones userId={usuario.id} />
+        <BotonNotificaciones />
       </Cabecera>
 
       <Contenido>
+        {!datos ? (
+          <SinDatos error={error} />
+        ) : (
+          <>
         <Tabs
           opciones={opciones}
           valor={filtro}
@@ -165,6 +169,8 @@ export default function MisPrestamos() {
             />
           </Card>
         </div>
+          </>
+        )}
       </Contenido>
     </>
   );

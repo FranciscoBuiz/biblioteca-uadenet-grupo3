@@ -8,15 +8,15 @@ import { Boton, BotonLink } from "@/components/ui/Boton";
 import { Aviso, Card, Dato, Datos } from "@/components/ui/Card";
 import { Mono, SinResultados } from "@/components/ui/Tabla";
 import { mensajeDeError } from "@/lib/api/errors";
-import { METODO_PAGO, payPenalty } from "@/lib/api/penalties";
+import { getPenalty, getSaldo, METODO_PAGO, payPenalty } from "@/lib/api/penalties";
+import { useApi } from "@/lib/api/useApi";
+import { SinDatos } from "@/components/ui/SinDatos";
 import {
   enDias,
   formatFecha,
   formatMonto,
 } from "@/lib/domain/rules";
 import type { PaymentReceipt, PenaltyView } from "@/lib/domain/types";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
-import { sancionesDe } from "@/lib/store/selectors";
 
 /* ---------------------------------------------------------------
    Pantallas 10 y 11: seleccion del medio de pago y comprobante.
@@ -31,14 +31,13 @@ import { sancionesDe } from "@/lib/store/selectors";
 
 export default function PagoDeSancion() {
   const { id } = useParams<{ id: string }>();
-  const db = useDb();
-  const usuario = useUsuarioActual();
 
   const [comprobante, setComprobante] = useState<PaymentReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  const sancion = sancionesDe(db, usuario.id).find((s) => s.id === id) ?? null;
+  const { datos: sancion, error: errorCarga, cargando } = useApi(() => getPenalty(id), [id]);
+  const { datos: saldo } = useApi(() => getSaldo(), []);
 
   async function confirmar() {
     if (!sancion) return;
@@ -64,11 +63,13 @@ export default function PagoDeSancion() {
         ]}
         titulo={comprobante ? "Comprobante de pago" : "Pagar sanción"}
       >
-        <BotonNotificaciones userId={usuario.id} />
+        <BotonNotificaciones />
       </Cabecera>
 
       <Contenido ancho="angosto">
-        {!sancion ? (
+        {!sancion && (cargando || errorCarga) ? (
+          <SinDatos error={errorCarga} />
+        ) : !sancion ? (
           <Card>
             <SinResultados
               titulo="No encontramos esa sanción"
@@ -106,6 +107,7 @@ export default function PagoDeSancion() {
             sancion={sancion}
             error={error}
             enviando={enviando}
+            saldo={saldo}
             onConfirmar={confirmar}
           />
         )}
@@ -119,11 +121,13 @@ function Formulario({
   sancion,
   error,
   enviando,
+  saldo,
   onConfirmar,
 }: {
   sancion: PenaltyView;
   error: string | null;
   enviando: boolean;
+  saldo: number | undefined;
   onConfirmar: () => void;
 }) {
   return (
@@ -148,6 +152,9 @@ function Formulario({
             <span className="text-[15px] font-bold text-rojo">
               {formatMonto(sancion.monto)}
             </span>
+          </Dato>
+          <Dato label="Tu saldo" destacado>
+            {saldo === undefined ? "—" : formatMonto(saldo)}
           </Dato>
         </Datos>
       </div>

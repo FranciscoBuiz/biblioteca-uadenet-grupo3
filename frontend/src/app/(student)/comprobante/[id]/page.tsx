@@ -6,9 +6,11 @@ import { BotonNotificaciones } from "@/components/shell/PanelNotificaciones";
 import { Boton, BotonLink } from "@/components/ui/Boton";
 import { Card, Dato, Datos } from "@/components/ui/Card";
 import { Mono, SinResultados } from "@/components/ui/Tabla";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { getLoan } from "@/lib/api/loans";
+import { useUsuarioActual } from "@/lib/api/sesion";
+import { useApi } from "@/lib/api/useApi";
 import { formatFecha, nombreSede } from "@/lib/domain/rules";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
-import { prestamos } from "@/lib/store/selectors";
 
 /* ---------------------------------------------------------------
    Pantalla 06: comprobante del prestamo recien generado.
@@ -27,17 +29,22 @@ const MIGAS = [
 export default function Comprobante() {
   const { id } = useParams<{ id: string }>();
   const usuario = useUsuarioActual();
-  const db = useDb();
+  const { datos: prestamo, error, cargando } = useApi(() => getLoan(id), [id]);
+  const estudiante = prestamo?.estudiante ?? usuario;
 
-  const prestamo = prestamos(db).find((p) => p.id === id) ?? null;
-  const estudiante =
-    db.usuarios.find((u) => u.id === prestamo?.userId) ?? usuario;
+  if (!prestamo && (cargando || error)) {
+    return (
+      <Contenido ancho="angosto">
+        <SinDatos error={error} />
+      </Contenido>
+    );
+  }
 
   if (!prestamo) {
     return (
       <>
         <Cabecera migas={MIGAS} titulo="Comprobante de préstamo">
-          <BotonNotificaciones userId={usuario.id} />
+          <BotonNotificaciones />
         </Cabecera>
 
         <Contenido ancho="angosto">
@@ -60,7 +67,7 @@ export default function Comprobante() {
   return (
     <>
       <Cabecera migas={MIGAS} titulo="Comprobante de préstamo">
-        <BotonNotificaciones userId={usuario.id} />
+        <BotonNotificaciones />
       </Cabecera>
 
       <Contenido ancho="angosto">

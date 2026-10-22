@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useUsuario } from "@/lib/store/LibraryProvider";
+import { useUsuario } from "@/lib/api/sesion";
 
 /**
  * Raiz: manda a cada quien a su inicio.

@@ -11,14 +11,13 @@ import { Portada } from "@/components/ui/Portada";
 import { EstadoPrestamoPill } from "@/components/ui/StatusPill";
 import { SinResultados } from "@/components/ui/Tabla";
 import { formatFecha, nombreSede } from "@/lib/domain/rules";
-import type { LoanView } from "@/lib/domain/types";
-import type { Db } from "@/lib/store/db";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
-import {
-  notificacionesDe,
-  prestamosDe,
-  sancionesDe,
-} from "@/lib/store/selectors";
+import type { LoanView, Notification } from "@/lib/domain/types";
+import { SinDatos } from "@/components/ui/SinDatos";
+import { getLoans } from "@/lib/api/loans";
+import { getNotifications } from "@/lib/api/notifications";
+import { getPenalties } from "@/lib/api/penalties";
+import { useUsuarioActual } from "@/lib/api/sesion";
+import { useApi } from "@/lib/api/useApi";
 
 /* ---------------------------------------------------------------
    Pantalla 02: inicio del estudiante.
@@ -30,12 +29,30 @@ import {
 
 export default function InicioEstudiante() {
   const usuario = useUsuarioActual();
-  const db = useDb();
+  const prestamosApi = useApi(() => getLoans(), []);
+  const sancionesApi = useApi(() => getPenalties(), []);
+  const notifApi = useApi(() => getNotifications(), []);
 
-  const mis = prestamosDe(db, usuario.id);
+  const mis = prestamosApi.datos;
+  const misSanciones = sancionesApi.datos;
+  if (!mis || !misSanciones) {
+    return (
+      <>
+        <Cabecera
+          migas={[{ etiqueta: "Biblioteca" }, { etiqueta: "Inicio" }]}
+          titulo="Mi biblioteca"
+        >
+          <BotonNotificaciones />
+        </Cabecera>
+        <Contenido>
+          <SinDatos error={prestamosApi.error ?? sancionesApi.error} />
+        </Contenido>
+      </>
+    );
+  }
+
   const activos = mis.filter((p) => !p.fechaDevolucion);
   const vencidos = activos.filter((p) => p.diasAtraso > 0);
-  const misSanciones = sancionesDe(db, usuario.id);
   const pendientes = misSanciones.filter((s) => s.estado === "pendiente");
 
   // La lista del mockup esta ordenada por cercania del vencimiento.
@@ -46,7 +63,7 @@ export default function InicioEstudiante() {
   // "Mas proximo" es el primero que todavia esta en plazo.
   const proxima = enCurso.find((p) => p.diasAtraso === 0);
 
-  const avisos = elegirAvisos(db, usuario.id);
+  const avisos = elegirAvisos(notifApi.datos ?? []);
 
   return (
     <>
@@ -54,7 +71,7 @@ export default function InicioEstudiante() {
         migas={[{ etiqueta: "Biblioteca" }, { etiqueta: "Inicio" }]}
         titulo="Mi biblioteca"
       >
-        <BotonNotificaciones userId={usuario.id} />
+        <BotonNotificaciones />
       </Cabecera>
 
       <Contenido>
@@ -241,8 +258,7 @@ function detalleEstado(prestamo: LoanView): string | undefined {
  * Las dos notificaciones sin leer mas recientes. Si no hay ninguna sin
  * leer, caemos en las dos ultimas para que la tarjeta no quede vacia.
  */
-function elegirAvisos(db: Db, userId: string) {
-  const todas = notificacionesDe(db, userId);
+function elegirAvisos(todas: Notification[]) {
   const nuevas = todas.filter((n) => !n.leida);
   return (nuevas.length > 0 ? nuevas : todas).slice(0, 2);
 }

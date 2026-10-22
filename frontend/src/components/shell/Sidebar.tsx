@@ -4,12 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/lib/api/auth";
 import type { User } from "@/lib/domain/types";
-import { useDb } from "@/lib/store/LibraryProvider";
-import {
-  prestamosDe,
-  prestamosVencidos,
-  sancionesDe,
-} from "@/lib/store/selectors";
+import { getLoans } from "@/lib/api/loans";
+import { getPenalties } from "@/lib/api/penalties";
+import { useApi } from "@/lib/api/useApi";
 import { esActivo, navDe, subtituloMarca, type ItemNav } from "./nav";
 
 /* ---------------------------------------------------------------
@@ -27,16 +24,20 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const db = useDb();
   const items = navDe(usuario.rol);
+  const rol = usuario.rol;
+
+  // Los badges fallan en silencio: un error de red no debe romper el menu.
+  const { datos: activos } = useApi(
+    () => (rol === "estudiante" ? getLoans({ estado: "activos" }) : Promise.resolve([])),
+    [rol],
+  );
+  const { datos: pendientes } = useApi(() => getPenalties({ estado: "pendientes" }), [rol]);
 
   const badges: Record<NonNullable<ItemNav["badge"]>, number> = {
-    prestamos: prestamosDe(db, usuario.id).filter((p) => !p.fechaDevolucion)
-      .length,
-    sanciones: sancionesDe(db, usuario.id).filter(
-      (s) => s.estado === "pendiente",
-    ).length,
-    vencidos: db.sanciones.filter((s) => s.estado === "pendiente").length,
+    prestamos: activos?.length ?? 0,
+    sanciones: pendientes?.length ?? 0,
+    vencidos: pendientes?.length ?? 0,
   };
 
   async function cerrarSesion() {
@@ -158,6 +159,6 @@ export function BottomNav({ usuario }: { usuario: User }) {
 
 /** Contador de vencidos para el panel del bibliotecario. */
 export function useVencidos(): number {
-  const db = useDb();
-  return prestamosVencidos(db).length;
+  const { datos } = useApi(() => getLoans({ estado: "vencidos" }), []);
+  return datos?.length ?? 0;
 }

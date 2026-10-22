@@ -7,7 +7,7 @@ import { Aviso } from "@/components/ui/Card";
 import { Campo } from "@/components/ui/Form";
 import { CUENTAS_DEMO, login } from "@/lib/api/auth";
 import { mensajeDeError } from "@/lib/api/errors";
-import { useUsuario } from "@/lib/store/LibraryProvider";
+import { useUsuario } from "@/lib/api/sesion";
 
 /* ---------------------------------------------------------------
    Pantalla 01: panel de marca a la izquierda y formulario de

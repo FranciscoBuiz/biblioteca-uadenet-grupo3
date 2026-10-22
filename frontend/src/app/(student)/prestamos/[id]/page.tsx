@@ -10,7 +10,9 @@ import { Aviso, Card, Dato, Datos } from "@/components/ui/Card";
 import { EstadoPrestamoPill } from "@/components/ui/StatusPill";
 import { Mono, SinResultados } from "@/components/ui/Tabla";
 import { mensajeDeError } from "@/lib/api/errors";
-import { renewLoan } from "@/lib/api/loans";
+import { getLoan, renewLoan } from "@/lib/api/loans";
+import { useApi } from "@/lib/api/useApi";
+import { SinDatos } from "@/components/ui/SinDatos";
 import {
   DIAS_RENOVACION,
   enDias,
@@ -20,15 +22,12 @@ import {
   puedeRenovar,
 } from "@/lib/domain/rules";
 import type { LoanView } from "@/lib/domain/types";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
-import { prestamosDe } from "@/lib/store/selectors";
 
 /* ---------------------------------------------------------------
    Pantalla 08: ficha de un prestamo con sus fechas, el ejemplar
    asignado y la renovacion.
 
-   Mostramos solo prestamos del estudiante de la sesion: la lista se
-   filtra por usuario antes de buscar el id de la URL.
+   El backend filtra por el token: un prestamo ajeno responde error.
    --------------------------------------------------------------- */
 
 /** Texto del renglon "Dias restantes" segun en que situacion esta el prestamo. */
@@ -42,14 +41,11 @@ function textoDias(prestamo: LoanView): string {
 
 export default function DetallePrestamo() {
   const { id } = useParams<{ id: string }>();
-  const db = useDb();
-  const usuario = useUsuarioActual();
-
   const [error, setError] = useState<string | null>(null);
   const [renovado, setRenovado] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  const prestamo = prestamosDe(db, usuario.id).find((p) => p.id === id) ?? null;
+  const { datos: prestamo, error: errorCarga, cargando } = useApi(() => getLoan(id), [id]);
 
   async function renovar() {
     if (!prestamo) return;
@@ -77,11 +73,13 @@ export default function DetallePrestamo() {
         ]}
         titulo="Detalle de préstamo"
       >
-        <BotonNotificaciones userId={usuario.id} />
+        <BotonNotificaciones />
       </Cabecera>
 
       <Contenido ancho="angosto">
-        {!prestamo ? (
+        {!prestamo && (cargando || errorCarga) ? (
+          <SinDatos error={errorCarga} />
+        ) : !prestamo ? (
           <Card>
             <SinResultados
               titulo="No encontramos ese préstamo"

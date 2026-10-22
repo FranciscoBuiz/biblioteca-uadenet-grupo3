@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Cabecera, Contenido } from "@/components/shell/Cabecera";
 import { BotonNotificaciones } from "@/components/shell/PanelNotificaciones";
 import { BotonLink } from "@/components/ui/Boton";
-import { Card } from "@/components/ui/Card";
+import { Aviso, Card } from "@/components/ui/Card";
 import {
   BarraFiltros,
   Buscador,
@@ -16,17 +16,17 @@ import {
 import { Portada } from "@/components/ui/Portada";
 import { CategoriaPill, Disponibilidad } from "@/components/ui/StatusPill";
 import { Mono, SinResultados } from "@/components/ui/Tabla";
+import { getBooks, getCategorias } from "@/lib/api/books";
+import { useApi } from "@/lib/api/useApi";
 import { nombreSede, SEDES } from "@/lib/domain/rules";
 import type { SedeId } from "@/lib/domain/types";
-import { useDb, useUsuarioActual } from "@/lib/store/LibraryProvider";
-import { categorias, librosConStock } from "@/lib/store/selectors";
+import { useSedeActiva } from "@/lib/sedeActiva";
 
 /* ---------------------------------------------------------------
    Pantalla 03: catalogo de libros.
 
-   El filtrado es local sobre librosConStock(db): el store es
-   sincrono y repinta solo, asi que no hace falta pasar por la API
-   async para una busqueda que no muta nada.
+   Los filtros viajan al backend (GET /books); el catalogo se vuelve
+   a pedir cada vez que cambian.
    --------------------------------------------------------------- */
 
 type Orden = "recientes" | "titulo" | "disponibilidad";
@@ -38,11 +38,10 @@ const ORDENES: Opcion<Orden>[] = [
 ];
 
 export default function Catalogo() {
-  const usuario = useUsuarioActual();
-  const db = useDb();
+  const sedeActiva = useSedeActiva();
 
   const [texto, setTexto] = useState("");
-  const [sede, setSede] = useState<SedeId>(db.sedeActiva);
+  const [sede, setSede] = useState<SedeId>(sedeActiva);
   const [soloStock, setSoloStock] = useState(false);
   const [categoria, setCategoria] = useState("todas");
   const [orden, setOrden] = useState<Orden>("recientes");
@@ -52,37 +51,24 @@ export default function Catalogo() {
     etiqueta: s.nombre,
   }));
 
+  const { datos: categorias } = useApi(() => getCategorias(), []);
   const opcionesCategoria: Opcion<string>[] = [
     { id: "todas", etiqueta: "Todas" },
-    ...categorias(db).map((c) => ({ id: c, etiqueta: c })),
+    ...(categorias ?? []).map((c) => ({ id: c, etiqueta: c })),
   ];
 
-  const resultados = useMemo(() => {
-    const busqueda = texto.trim().toLowerCase();
-
-    const filtrados = librosConStock(db)
-      .filter((libro) => libro.activo)
-      .filter((libro) =>
-        categoria === "todas" ? true : libro.categoria === categoria,
-      )
-      .filter((libro) => (soloStock ? libro.porSede[sede] > 0 : true))
-      .filter((libro) => {
-        if (!busqueda) return true;
-        return (
-          libro.titulo.toLowerCase().includes(busqueda) ||
-          libro.autor.toLowerCase().includes(busqueda) ||
-          libro.isbn.includes(busqueda)
-        );
-      });
-
-    return filtrados.sort((a, b) => {
-      if (orden === "titulo") return a.titulo.localeCompare(b.titulo, "es");
-      if (orden === "disponibilidad") {
-        return b.porSede[sede] - a.porSede[sede] || a.titulo.localeCompare(b.titulo, "es");
-      }
-      return b.anio - a.anio || a.titulo.localeCompare(b.titulo, "es");
-    });
-  }, [db, texto, sede, soloStock, categoria, orden]);
+  const { datos, error } = useApi(
+    () =>
+      getBooks({
+        q: texto,
+        sede,
+        categoria: categoria === "todas" ? undefined : categoria,
+        soloStock,
+        orden,
+      }),
+    [texto, sede, categoria, soloStock, orden],
+  );
+  const resultados = datos ?? [];
 
   return (
     <>
@@ -90,7 +76,7 @@ export default function Catalogo() {
         migas={[{ etiqueta: "Biblioteca" }, { etiqueta: "Catálogo" }]}
         titulo="Catálogo de libros"
       >
-        <BotonNotificaciones userId={usuario.id} />
+        <BotonNotificaciones />
       </Cabecera>
 
       <Contenido>
@@ -136,7 +122,15 @@ export default function Catalogo() {
           />
         </div>
 
-        {resultados.length === 0 ? (
+        {error ? (
+          <div className="mt-3.5">
+            <Aviso tono="error">{error}</Aviso>
+          </div>
+        ) : !datos ? (
+          <p className="mt-3.5 text-[13px] text-tenue" role="status">
+            Cargando…
+          </p>
+        ) : resultados.length === 0 ? (
           <Card padding={false} className="mt-3.5 px-5 py-10">
             <SinResultados
               titulo="No encontramos títulos con esos filtros"
