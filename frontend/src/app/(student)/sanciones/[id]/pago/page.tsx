@@ -1,0 +1,252 @@
+"use client";
+
+import { useParams } from "next/navigation";
+import { useState } from "react";
+import { Cabecera, Contenido } from "@/components/shell/Cabecera";
+import { BotonNotificaciones } from "@/components/shell/PanelNotificaciones";
+import { Boton, BotonLink } from "@/components/ui/Boton";
+import { Aviso, Card, Dato, Datos } from "@/components/ui/Card";
+import { Mono, SinResultados } from "@/components/ui/Tabla";
+import { mensajeDeError } from "@/lib/api/errors";
+import { getPenalty, getSaldo, METODO_PAGO, payPenalty } from "@/lib/api/penalties";
+import { useApi } from "@/lib/api/useApi";
+import { SinDatos } from "@/components/ui/SinDatos";
+import {
+  enDias,
+  formatFecha,
+  formatMonto,
+} from "@/lib/domain/rules";
+import type { PaymentReceipt, PenaltyView } from "@/lib/domain/types";
+
+/* ---------------------------------------------------------------
+   Pantallas 10 y 11: seleccion del medio de pago y comprobante.
+
+   Las dos viven en la misma ruta y se alternan con estado local a
+   proposito: el numero de operacion lo genera payPenalty y no queda
+   guardado en la base, asi que una vez que navegas a otra pantalla
+   ya no hay forma de recuperarlo. Separarlas en /pago y
+   /pago/comprobante dejaria una URL que, al recargarla o
+   compartirla, no podria mostrar el comprobante.
+   --------------------------------------------------------------- */
+
+export default function PagoDeSancion() {
+  const { id } = useParams<{ id: string }>();
+
+  const [comprobante, setComprobante] = useState<PaymentReceipt | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  const { datos: sancion, error: errorCarga, cargando } = useApi(() => getPenalty(id), [id]);
+  const { datos: saldo } = useApi(() => getSaldo(), []);
+
+  async function confirmar() {
+    if (!sancion) return;
+    setError(null);
+    setEnviando(true);
+    try {
+      setComprobante(await payPenalty(sancion.id));
+    } catch (e) {
+      setError(mensajeDeError(e));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <>
+      <Cabecera
+        migas={[
+          { etiqueta: "Biblioteca" },
+          { etiqueta: "Sanciones", href: "/sanciones" },
+          { etiqueta: id, href: `/sanciones/${id}` },
+          { etiqueta: comprobante ? "Comprobante" : "Pago" },
+        ]}
+        titulo={comprobante ? "Comprobante de pago" : "Pagar sanción"}
+      >
+        <BotonNotificaciones />
+      </Cabecera>
+
+      <Contenido ancho="angosto">
+        {!sancion && (cargando || errorCarga) ? (
+          <SinDatos error={errorCarga} />
+        ) : !sancion ? (
+          <Card>
+            <SinResultados
+              titulo="No encontramos esa sanción"
+              detalle="Puede que el identificador esté mal escrito o que la sanción sea de otra cuenta."
+            />
+            <div className="mt-5 flex justify-center">
+              <BotonLink href="/sanciones" variante="neutro" tamano="chico">
+                Volver a mis sanciones
+              </BotonLink>
+            </div>
+          </Card>
+        ) : comprobante ? (
+          <Comprobante comprobante={comprobante} />
+        ) : sancion.estado === "cobrada" ? (
+          <Card>
+            <Aviso tono="ok" titulo="Esta multa ya está paga">
+              La sanción {sancion.id} figura cobrada
+              {sancion.fechaCobro
+                ? ` desde el ${formatFecha(sancion.fechaCobro)}`
+                : ""}
+              , así que no hay nada por abonar.
+            </Aviso>
+            <div className="mt-4 flex flex-wrap gap-2.5">
+              <BotonLink
+                href={`/sanciones/${sancion.id}`}
+                variante="neutro"
+                tamano="chico"
+              >
+                Ver detalle de la sanción
+              </BotonLink>
+            </div>
+          </Card>
+        ) : (
+          <Formulario
+            sancion={sancion}
+            error={error}
+            enviando={enviando}
+            saldo={saldo}
+            onConfirmar={confirmar}
+          />
+        )}
+      </Contenido>
+    </>
+  );
+}
+
+/** Paso 1 (mockup 10): resumen de la multa y eleccion del medio de pago. */
+function Formulario({
+  sancion,
+  error,
+  enviando,
+  saldo,
+  onConfirmar,
+}: {
+  sancion: PenaltyView;
+  error: string | null;
+  enviando: boolean;
+  saldo: number | undefined;
+  onConfirmar: () => void;
+}) {
+  return (
+    <Card>
+      <h2 className="serif text-xl sm:text-[23px]">Pagar sanción</h2>
+      <p className="mt-1.5 text-[13px] text-tenue">
+        Regularizá la multa para poder volver a solicitar préstamos.
+      </p>
+
+      <div className="mt-5 rounded-[12px] border border-borde-suave px-4">
+        <Datos>
+          <Dato label="Sanción" destacado>
+            <Mono>{sancion.id}</Mono>
+          </Dato>
+          <Dato label="Libro" destacado>
+            {sancion.libro.titulo}
+          </Dato>
+          <Dato label="Días de atraso" destacado>
+            {enDias(sancion.diasAtraso)}
+          </Dato>
+          <Dato label="Total a pagar" destacado>
+            <span className="text-[15px] font-bold text-rojo">
+              {formatMonto(sancion.monto)}
+            </span>
+          </Dato>
+          <Dato label="Tu saldo" destacado>
+            {saldo === undefined ? "—" : formatMonto(saldo)}
+          </Dato>
+        </Datos>
+      </div>
+
+      {/* Las multas solo se cobran contra el saldo institucional, asi que
+          el medio de pago se informa en lugar de elegirse. */}
+      <div className="mt-5">
+        <p className="eyebrow mb-2.5">Medio de pago</p>
+        <div className="rounded-[11px] border border-secundario bg-aviso-bg px-4 py-3.5">
+          <span className="block text-sm font-semibold">{METODO_PAGO.nombre}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-tenue">
+            {METODO_PAGO.detalle} Las multas solo pueden abonarse con el saldo
+            institucional.
+          </span>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4">
+          <Aviso tono="error">{error}</Aviso>
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap gap-2.5">
+        <Boton
+          variante="confirmar"
+          tamano="chico"
+          cargando={enviando}
+          onClick={onConfirmar}
+        >
+          Confirmar pago
+        </Boton>
+        <BotonLink
+          href={`/sanciones/${sancion.id}`}
+          variante="neutro"
+          tamano="chico"
+        >
+          Volver
+        </BotonLink>
+      </div>
+    </Card>
+  );
+}
+
+/** Paso 2 (mockup 11): comprobante con el numero de operacion. */
+function Comprobante({ comprobante }: { comprobante: PaymentReceipt }) {
+  return (
+    <Card padding={false}>
+      <div className="bg-verde px-5 py-5 text-white">
+        <p className="text-[11px] font-semibold uppercase tracking-[1.6px] text-white/85">
+          Comprobante de pago
+        </p>
+        <h2 className="serif mt-1 text-xl sm:text-[22px]">Pago registrado</h2>
+        <p className="mt-1 text-[13px] text-white/90">
+          La sanción quedó regularizada.
+        </p>
+      </div>
+
+      <div className="px-5 py-4">
+        <Datos>
+          <Dato label="Nº de operación" destacado>
+            <Mono>{comprobante.operacion}</Mono>
+          </Dato>
+          <Dato label="Fecha" destacado>
+            {formatFecha(comprobante.fecha)}
+          </Dato>
+          <Dato label="Importe" destacado>
+            <span className="text-[15px] font-bold">
+              {formatMonto(comprobante.monto)}
+            </span>
+          </Dato>
+          <Dato label="Medio de pago" destacado>
+            {METODO_PAGO.nombre}
+          </Dato>
+          <Dato label="Sanción" destacado>
+            <Mono>{comprobante.penaltyId}</Mono>
+          </Dato>
+        </Datos>
+
+        <div className="mt-4">
+          <Aviso tono="ok">Ya podés volver a solicitar préstamos.</Aviso>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2.5">
+          <BotonLink href="/catalogo" variante="avanzar" tamano="chico">
+            Ir al catálogo
+          </BotonLink>
+          <BotonLink href="/sanciones" variante="neutro" tamano="chico">
+            Ver mis sanciones
+          </BotonLink>
+        </div>
+      </div>
+    </Card>
+  );
+}

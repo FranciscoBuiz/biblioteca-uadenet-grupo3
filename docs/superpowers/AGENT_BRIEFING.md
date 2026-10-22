@@ -258,7 +258,7 @@ Tipos derivados: `BookWithStock` (con `totales`, `disponibles`, `prestados`,
   `getOverdueLoans`, `createLoan(isbn, sede, userId)`, `renewLoan(id)`,
   `returnLoan(id)` → `{prestamo, sancion}`.
 - `penalties`: `getPenalties`, `filtrarSanciones(filtro)` (sincrónica),
-  `getPenalty`, `payPenalty(id, metodo)` → comprobante, `METODOS_PAGO`.
+  `getPenalty`, `payPenalty(id)` → comprobante (solo saldo institucional), `METODO_PAGO`.
 - `notifications`: `filtrarNotificaciones(userId, filtro)`, `contarSinLeer`,
   `markAllRead`, `markRead`.
 - `errors`: `ApiError`, `mensajeDeError(e)`.

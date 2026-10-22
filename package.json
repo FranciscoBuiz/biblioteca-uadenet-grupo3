@@ -2,27 +2,13 @@
   "name": "biblioteca-uadenet",
   "version": "1.0.0",
   "private": true,
-  "description": "Frontend de la Biblioteca Universitaria UADEnet - Entrega 1, Modulo 3",
+  "workspaces": ["frontend", "library", "core", "backoffice"],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "next": "^15.5.4",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "dev": "concurrently -n frontend,core,library -c cyan,green,magenta \"npm run dev -w @uadenet/frontend\" \"npm run dev -w @uadenet/core\" \"npm run dev -w @uadenet/library\"",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.13",
-    "@types/node": "^22.18.1",
-    "@types/react": "^19.1.13",
-    "@types/react-dom": "^19.1.9",
-    "eslint": "^9.39.5",
-    "eslint-config-next": "^15.5.27",
-    "tailwindcss": "^4.1.13",
-    "typescript": "^5.9.2"
+    "concurrently": "^9.2.1"
   }
 }
