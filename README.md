@@ -1,24 +1,87 @@
-# UADEnet · Biblioteca Universitaria — Frontend
+# UADEnet · Biblioteca Universitaria
 
-Frontend del módulo Biblioteca de UADEnet. Implementa las 22 pantallas de la
-maqueta de la Entrega 1, Módulo 3, para los dos perfiles de uso: **estudiante**
+Módulo 3 (Biblioteca) de UADEnet: frontend, backend, y simulaciones locales del
+CORE y del Backoffice con los que se integra. Cubre los perfiles **estudiante**
 (catálogo, préstamos, sanciones, notificaciones) y **bibliotecario** (catálogo,
 stock por sede, préstamos, devoluciones, sanciones).
 
 Facultad de Ingeniería y Ciencias Exactas · Desarrollo de Aplicaciones II · Grupo 3
 Barbieri · Brandt · Buiz · Marinoni · Sanguineti
 
+## Componentes
+
+Monorepo con npm workspaces. Cada carpeta tiene su README.
+
+| Carpeta | Qué es | Puerto |
+|---|---|---|
+| `frontend/` | Next.js 15 + React 19. Las 22 pantallas; habla solo con el CORE por HTTP | 3000 |
+| `core/` | CORE simulado: login con JWT, Gateway hacia la Biblioteca, billetera, eventos, usuarios | 4000 |
+| `library/` | Biblioteca, el producto real: rutas, servicios con las reglas de negocio, repositorio MariaDB, consumidor RabbitMQ | 4001 (solo 127.0.0.1) |
+| `backoffice/` | Backoffice simulado: CLI que publica mensajes en RabbitMQ | — |
+| `docs/` | `integracion.md` (contratos entre módulos) y specs | — |
+
+La intro "Frontend del módulo…" de la Entrega 1 ya no aplica: el frontend dejó de
+tener store local y `localStorage`; los datos y las reglas viven en `library/`.
+
 ## Cómo levantarlo
 
 ```bash
-npm install               # en la raíz (workspaces)
-cp .env.example .env      # credenciales de desarrollo de MariaDB
-docker compose up -d      # RabbitMQ (5672, panel en 15672) y MariaDB (3306)
-npm run dev               # frontend en http://localhost:3000
+npm install                                  # en la raíz (workspaces)
+cp .env.example .env                         # credenciales de MariaDB para docker compose
+cp core/.env.example core/.env
+cp library/.env.example library/.env         # completar <pass> en DATABASE_URL con MARIADB_PASSWORD
+cp frontend/.env.example frontend/.env
+docker compose up -d                         # RabbitMQ (5672, panel 15672) y MariaDB (3306)
+npm run dev                                  # frontend, core y library en paralelo
 ```
 
-Los tests de MariaDB corren contra una base aparte, porque borran todas las
-tablas. Para correrlos:
+Abrir `http://localhost:3000`. Otros comandos: `npm test`, `npm run typecheck`,
+`npm run build -w @uadenet/frontend`, `npm run lint -w @uadenet/frontend`.
+
+## Cuentas de la demo
+
+| Perfil | Mail | Contraseña |
+|---|---|---|
+| Estudiante | `ana.garcia@uade.edu.ar` | `uade1234` |
+| Bibliotecaria | `laura.fernandez@uade.edu.ar` | `uade1234` |
+
+Ana tiene saldo ($5000). El estudiante **sin saldo** es `u-camila` (ver
+`core/README.md`): sirve para probar el rechazo `INSUFFICIENT_FUNDS` al pagar una
+multa. El login tiene atajos para las dos cuentas principales.
+
+## Publicar mensajes del Backoffice
+
+Con RabbitMQ levantado y la Biblioteca corriendo:
+
+```bash
+npm run publish:rate -w @uadenet/backoffice -- 3000 2026-11-01
+npm run publish:location -w @uadenet/backoffice -- sede-monserrat "Biblioteca - PB" 120
+npm run publish:invalid -w @uadenet/backoffice      # termina en la DLQ
+```
+
+Detalle en `backoffice/README.md`.
+
+## Dónde mirar
+
+- **Swagger de la Biblioteca:** `http://127.0.0.1:4001/docs`.
+- **Eventos recibidos por el CORE** (p. ej. `library.penalty.applied.v1`):
+  `GET http://localhost:4000/internal/v1/events` con header `X-Service-Key`
+  (valor de `SERVICE_KEY` en `core/.env`).
+- **RabbitMQ:** `http://localhost:15672` (guest/guest): cola `library.backoffice` y DLQ `library.dlq`.
+- **Contratos y trazabilidad:** `docs/integracion.md`.
+
+## Base de datos (MariaDB)
+
+La Biblioteca usa MariaDB 11.4 (servicio `mariadb` de `docker-compose.yml`,
+conector oficial, sin ORM), implementada como un `Repositorio` más.
+
+- **Esquema:** se crea al arrancar la Biblioteca (`CREATE TABLE IF NOT EXISTS`).
+- **Seed:** se carga solo si la base está vacía, relativo a la fecha de arranque.
+- **Base de tests:** `biblioteca_test`, aparte porque los tests borran las tablas.
+  Los tests de MariaDB se saltean si falta `MARIADB_TEST_URL`.
+- **Resetear los datos de desarrollo:** borrar las tablas de `biblioteca`, o el
+  volumen (`docker compose down -v`), y reiniciar la Biblioteca para que recree
+  el esquema y el seed.
 
 ```bash
 MARIADB_TEST_URL=mariadb://biblioteca:<pass>@127.0.0.1:3306/biblioteca_test npm test -w @uadenet/library
@@ -31,202 +94,42 @@ MARIADB_TEST_URL=mariadb://biblioteca:<pass>@127.0.0.1:3306/biblioteca_test npm 
 docker compose exec mariadb mariadb -uroot -p<MARIADB_ROOT_PASSWORD> -e "CREATE DATABASE IF NOT EXISTS biblioteca_test; GRANT ALL ON biblioteca_test.* TO 'biblioteca'@'%';"
 ```
 
-Otros comandos:
+La base es privada de la Biblioteca: ningún otro módulo la lee.
 
-```bash
-npm run build -w @uadenet/frontend       # build de producción
-npm run typecheck                        # tsc --noEmit en los workspaces
-npm run lint -w @uadenet/frontend
-```
+## Escalado y comunicación (ideas de la materia)
 
-## Cuentas de la demo
-
-| Perfil | Mail | Contraseña |
-|---|---|---|
-| Estudiante | `ana.garcia@uade.edu.ar` | `uade1234` |
-| Bibliotecaria | `laura.fernandez@uade.edu.ar` | `uade1234` |
-
-La pantalla de login tiene atajos para cargar cualquiera de las dos.
-
-## Alcance: esto es solo frontend
-
-**No hay backend.** No hay API routes, ni base de datos, ni llamadas al CORE
-Gateway. Los datos viven en un store en memoria que se persiste en
-`localStorage`, sembrado con los datos de la maqueta.
-
-Lo que sí funciona de verdad, con estado compartido entre las dos vistas:
-
-- Pedir un préstamo descuenta un ejemplar del stock de esa sede y aparece al
-  instante en la vista del bibliotecario.
-- Renovar suma 3 días y consume una de las 2 renovaciones disponibles.
-- Registrar una devolución en el mostrador libera el ejemplar, cierra el
-  préstamo y, si el atraso llegó al día 8, genera la sanción que el estudiante
-  ve en el momento.
-- Pagar la multa la marca como cobrada y desbloquea los préstamos.
-- Las notificaciones se generan solas a partir de esas operaciones.
-
-### El "hoy" de la demo está fijado
-
-La maqueta está fechada el **26/08/2026** y los datos sembrados son relativos a
-ese día, para que los estados coincidan con las capturas del PDF (PRE-1003 a 2
-días de vencer, PRE-1002 con 3 días de atraso, PRE-1001 con 18).
-
-Esa fecha es la constante `HOY` en `src/lib/domain/rules.ts`. Al conectar el
-backend real, reemplazala por `new Date()`.
-
-### Reiniciar los datos
-
-El estado se guarda en `localStorage` bajo la clave `uadenet-biblioteca-v1`.
-Para volver a los datos originales, borrá esa clave desde las DevTools del
-navegador (Application → Local Storage) y recargá.
-
-## Stack
-
-- **Next.js 15** (App Router) + **React 19** + **TypeScript** strict
-- **Tailwind CSS v4** con tokens derivados de la maqueta
-- `next/font/google` para Libre Caslon Text y Hanken Grotesk
-
-Sin dependencias de UI de terceros: los componentes y los iconos son propios.
-
-## Organización del código
-
-```
-src/
-  app/
-    login/                    01 · ingreso con mail institucional
-    (student)/                02–13 · área del estudiante
-    (admin)/admin/            14–22 · panel del bibliotecario
-    layout.tsx               fuentes + LibraryProvider
-    globals.css              tokens del design system
-  components/
-    shell/                   sidebar, cabecera, notificaciones, guard de rol
-    ui/                      botones, tarjetas, pills, filtros, tablas, formularios
-  lib/
-    domain/   types.ts       entidades del dominio
-              rules.ts       reglas de negocio y formato (única fuente de verdad)
-    api/                     capa de datos con la forma de los endpoints reales
-    store/    seed.ts        datos iniciales de la maqueta
-              db.ts          base en memoria + persistencia
-              selectors.ts   vistas derivadas
-              LibraryProvider.tsx
-```
-
-### Por qué la capa de API está separada
-
-`src/lib/api/*` expone funciones `async` cuyas firmas replican los endpoints
-documentados en `UADEnet_Biblioteca_Grupo3.xlsx`:
-
-| Función | Endpoint equivalente |
-|---|---|
-| `login(email, password)` | `POST /api/v1/auth/login` |
-| `getBooks({q, sede, categoria, soloStock})` | `GET /api/v1/library/books?q=` |
-| `createLoan(isbn, sede, userId)` | `POST /api/v1/library/loans` |
-| `renewLoan(id)` | `POST /api/v1/library/loans/{id}/renew` |
-| `returnLoan(id)` | `POST /api/v1/library/loans/{id}/return` |
-| `payPenalty(id)` | `POST /internal/v1/wallets/{userId}/debits` |
-
-Migrar al backend real es cambiar el cuerpo de esas funciones por un `fetch`.
-Ninguna pantalla toca el store directamente para escribir, así que las vistas no
-se modifican.
+- **Componentes con dueño:** cada carpeta es un componente que un equipo podría
+  poseer y desplegar por separado (code ownership).
+- **Contratos, no código compartido:** los componentes no se importan entre sí;
+  se relacionan por `library/openapi.yaml` y `docs/integracion.md`.
+- **Acoplamiento débil:** el frontend solo habla con el CORE; el Gateway valida el
+  JWT y reenvía a la Biblioteca (que exige `X-Gateway-Key`). El Backoffice solo
+  conoce la cola, no a la Biblioteca.
+- **Síncrono vs asíncrono:** REST para lo que necesita respuesta ya (login,
+  débito de la multa, consulta de usuarios); AMQP para lo que puede esperar
+  (tarifas y ubicaciones del Backoffice), con ack explícito y DLQ para no perder
+  mensajes. Si RabbitMQ cae, la app sigue funcionando.
+- **Trazabilidad:** `X-Correlation-Id` viaja del Gateway a la Biblioteca y de ahí
+  al CORE, y aparece en los logs de ambos.
 
 ## Reglas de negocio
 
-Todas centralizadas en `src/lib/domain/rules.ts`. No están repetidas en ninguna
-pantalla.
+Viven en `library/` (el frontend solo formatea).
 
 | Regla | Valor |
 |---|---|
 | Plazo de préstamo | 14 días corridos |
 | Próximo a vencer | faltan 3 días o menos |
-| Umbral de sanción | día 8 de atraso |
-| Monto de la multa | $2.500 ARS (`LIBRARY_LATE_FEE`) |
+| Umbral de sanción | día 8 de atraso (un job la detecta al arrancar y cada hora) |
+| Monto de la multa | $2.500 ARS por defecto; cambia con `backoffice.rate.changed.v1` |
 | Renovación | +3 días, máximo 2, bloqueada si hay reservas |
 | Validación de ISBN | 10 a 13 dígitos |
 | Bloqueo por deuda | con una multa impaga no se pueden pedir préstamos |
 | Sedes | Monserrat (CABA), Belgrano, Pinamar |
 
-## Mapa de pantallas
-
-### Estudiante
-
-| # | Pantalla | Ruta |
-|---|---|---|
-| 01 | Login | `/login` |
-| 02 | Inicio | `/inicio` |
-| 03 | Catálogo de libros | `/catalogo` |
-| 04 | Detalle de libro | `/catalogo/[isbn]` |
-| 05 | Confirmación de solicitud | modal sobre `/catalogo/[isbn]` |
-| 06 | Comprobante de préstamo | `/comprobante/[id]` |
-| 07 | Mis préstamos | `/prestamos` |
-| 08 | Detalle de préstamo | `/prestamos/[id]` |
-| 09 | Detalle de sanción | `/sanciones/[id]` |
-| 10 | Pago de la sanción | `/sanciones/[id]/pago` |
-| 11 | Comprobante de pago | paso 2 de `/sanciones/[id]/pago` |
-| 12 | Notificaciones (desplegable) | componente global del header |
-| 13 | Todas las notificaciones | `/notificaciones` |
-
-El listado de sanciones del estudiante está en `/sanciones`.
-
-### Bibliotecario
-
-| # | Pantalla | Ruta |
-|---|---|---|
-| 14 | Panel de administración | `/admin` |
-| 15 | Gestión de catálogo | `/admin/catalogo` |
-| 16 | Alta de libro y ejemplares | `/admin/catalogo/nuevo` |
-| 17 | Editar libro | `/admin/catalogo/[isbn]/editar` |
-| 18 | Ejemplares del título | `/admin/catalogo/[isbn]/ejemplares` |
-| 19 | Stock por sede | `/admin/stock` |
-| 20 | Gestión de préstamos | `/admin/prestamos` |
-| 21 | Mostrador de devolución | `/admin/devolucion` |
-| 22 | Sanciones y multas | `/admin/sanciones` |
-
 ## Identidad visual
 
-| Color | Uso |
-|---|---|
-| `#1A2B4B` azul institucional | marca, títulos, menú lateral |
-| `#2D5DA1` azul secundario | acciones secundarias y acentos |
-| `#127453` verde | confirmaciones y pagos |
-| `#D32F2F` rojo | vencimientos, sanciones y errores |
-| `#F8F9FA` neutro | fondo de las áreas de contenido |
-
-Tipografías: **Libre Caslon Text** para títulos, **Hanken Grotesk** para texto,
-labels y botones.
-
-Los mockups están diseñados a 1280px. A ese ancho la app es fiel a la maqueta;
-abajo de 1024px el menú lateral pasa a un drawer con navegación inferior, y
-abajo de 768px las tablas se reorganizan como tarjetas apiladas.
-
-## Verificación
-
-```bash
-npm run typecheck   # tsc --noEmit, limpio
-npm run lint        # eslint, limpio
-npm run build       # 23 rutas, sin errores ni warnings
-```
-
-Además se recorrieron los flujos en el navegador (Playwright sobre Edge),
-comprobando entre otras cosas que:
-
-- Los estados calculados coinciden con las capturas: PRE-1003 a 2 días de
-  vencer, PRE-1002 con 3 días de atraso, PRE-1001 con 18, PRE-1005 devuelto el
-  29/07/2026.
-- Con la multa impaga el sistema rechaza el préstamo, y lo permite después de
-  pagarla.
-- No se puede pedir dos veces un título que sigue sin devolver.
-- La fecha límite de un préstamo nuevo cae a 14 días (26/08 → 09/09/2026).
-- Registrar la devolución de PRE-1002 (3 días de atraso) **no** genera sanción
-  y devuelve el ejemplar BA-009 al stock disponible de Monserrat.
-- El guard de rol saca a la bibliotecaria del área de estudiante.
-- No hay scroll horizontal a 360px de ancho.
-
-## Dos desvíos deliberados de la maqueta
-
-1. **SAN-00031 arranca pendiente** en lugar de cobrada, para que el flujo
-   "detalle de sanción → pago → comprobante" sea recorrible de punta a punta.
-2. **Los contadores agregados se derivan de los datos** en lugar de estar
-   fijos: las capturas 14, 15 y 19 no cierran entre sí (27 contra 18 ejemplares
-   totales), así que preferimos un dataset internamente consistente.
-
-Ambos están documentados en los comentarios de `src/lib/store/seed.ts`.
+Azul institucional `#1A2B4B`, azul secundario `#2D5DA1`, verde `#127453`, rojo
+`#D32F2F`, neutro `#F8F9FA`. Tipografías Libre Caslon Text (títulos) y Hanken
+Grotesk (texto). Diseñado a 1280px; debajo de 1024px el menú pasa a drawer y
+debajo de 768px las tablas se apilan como tarjetas.
