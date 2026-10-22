@@ -10,6 +10,8 @@ const LOCATION_KEY = "backoffice.location.upserted.v1";
 const SEDES = ["monserrat", "belgrano", "pinamar"];
 const REINTENTO_MS = 5000;
 
+// Ida y vuelta por Date: rechaza 2026-02-31.
+const fechaReal = (f: string) => /^\d{4}-\d{2}-\d{2}$/.test(f) && new Date(`${f}T00:00:00Z`).toISOString().startsWith(f);
 const esTexto = (v: unknown): v is string => typeof v === "string" && v.length > 0;
 
 /** Valida y aplica un mensaje del Backoffice. Sin AMQP, para poder probarlo. */
@@ -26,13 +28,13 @@ export async function procesarMensaje(repo: Repositorio, routingKey: string, con
     if (!esTexto(m.rateType) || !esTexto(m.amount) || !esTexto(m.currency) || !esTexto(m.effectiveFrom)) return "invalido";
     if (m.rateType !== "LIBRARY_LATE_FEE") return "ignorado";
     const monto = Number(m.amount);
-    if (!/^\d+(\.\d{1,2})?$/.test(m.amount) || !(monto > 0) || m.currency !== "ARS" || !/^\d{4}-\d{2}-\d{2}$/.test(m.effectiveFrom)) return "invalido";
+    if (!/^\d+(\.\d{1,2})?$/.test(m.amount) || !(monto > 0) || m.currency !== "ARS" || !!fechaReal(m.effectiveFrom)) return "invalido";
     await repo.transaccion((r) => r.agregarTarifa({ monto, vigenteDesde: m.effectiveFrom as string }));
     return "aplicado";
   }
   if (routingKey === LOCATION_KEY) {
     const sede = esTexto(m.siteId) ? /^sede-(.+)$/.exec(m.siteId)?.[1] : undefined;
-    if (!esTexto(m.locationId) || !sede || !SEDES.includes(sede) || typeof m.name !== "string" || typeof m.status !== "string") return "invalido";
+    if (!esTexto(m.locationId) || !sede || !SEDES.includes(sede) || !esTexto(m.name) || typeof m.status !== "string") return "invalido";
     if (typeof m.capacity !== "number" || !Number.isInteger(m.capacity) || m.capacity < 0) return "invalido";
     const ubicacion: Location = { locationId: m.locationId, siteId: sede as SedeId, name: m.name, capacity: m.capacity, status: m.status };
     await repo.transaccion((r) => r.guardarUbicacion(ubicacion));
@@ -65,6 +67,8 @@ export function iniciarConsumidor(url: string, repo: Repositorio): () => Promise
       con.on("error", () => {}); // el "close" posterior dispara el reintento
       con.on("close", () => reintentar("conexion cerrada"));
       const ch = await con.createChannel();
+      ch.on("error", (e: Error) => console.error(`[library] canal RabbitMQ error: ${e.message}`));
+      ch.on("close", () => void con.close().catch(() => {})); // dispara el reintento
       await ch.assertExchange("backoffice.events", "topic", { durable: true });
       await ch.assertExchange("library.dlx", "fanout", { durable: true });
       await ch.assertQueue("library.dlq", { durable: true });
@@ -73,7 +77,7 @@ export function iniciarConsumidor(url: string, repo: Repositorio): () => Promise
       await ch.bindQueue("library.backoffice", "backoffice.events", "backoffice.#");
       await ch.prefetch(10);
       await ch.consume("library.backoffice", async (msg) => {
-        if (!msg) return;
+        if (!msg) { void con.close().catch(() => {}); return; } // consumidor cancelado
         const clave = msg.fields.routingKey;
         let resultado: Resultado;
         try {
@@ -83,8 +87,12 @@ export function iniciarConsumidor(url: string, repo: Repositorio): () => Promise
           resultado = "invalido";
         }
         console.log(`[library] backoffice ${clave} ${resultado}`);
-        if (resultado === "invalido") ch.nack(msg, false, false);
-        else ch.ack(msg);
+        try {
+          if (resultado === "invalido") ch.nack(msg, false, false);
+          else ch.ack(msg);
+        } catch (e) {
+          console.error(`[library] backoffice ${clave} no se pudo confirmar: ${(e as Error).message}`); // se reentrega al reconectar
+        }
       });
       console.log("[library] consumidor RabbitMQ listo (cola library.backoffice)");
     } catch (e) {
