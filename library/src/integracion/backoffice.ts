@@ -28,7 +28,7 @@ export async function procesarMensaje(repo: Repositorio, routingKey: string, con
     if (!esTexto(m.rateType) || !esTexto(m.amount) || !esTexto(m.currency) || !esTexto(m.effectiveFrom)) return "invalido";
     if (m.rateType !== "LIBRARY_LATE_FEE") return "ignorado";
     const monto = Number(m.amount);
-    if (!/^\d+(\.\d{1,2})?$/.test(m.amount) || !(monto > 0) || m.currency !== "ARS" || !!fechaReal(m.effectiveFrom)) return "invalido";
+    if (!/^\d+(\.\d{1,2})?$/.test(m.amount) || !(monto > 0) || m.currency !== "ARS" || !fechaReal(m.effectiveFrom)) return "invalido";
     await repo.transaccion((r) => r.agregarTarifa({ monto, vigenteDesde: m.effectiveFrom as string }));
     return "aplicado";
   }
