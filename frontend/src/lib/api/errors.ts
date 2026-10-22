@@ -1,16 +1,19 @@
 /**
- * Error de "negocio" devuelto por la capa de API falsa.
+ * Error devuelto por el CORE Gateway ({code, message}) o por la red.
  *
- * Equivale a un 4xx del CORE Gateway: el mensaje esta escrito para
- * mostrarse tal cual en pantalla.
+ * El mensaje esta escrito para mostrarse tal cual en pantalla.
+ * `codigo` es el status HTTP (0 si no hubo conexion); `code` es el
+ * codigo de negocio del backend (ej. "NOT_FOUND"), si vino.
  */
 export class ApiError extends Error {
   readonly codigo: number;
+  readonly code?: string;
 
-  constructor(mensaje: string, codigo = 400) {
+  constructor(mensaje: string, codigo = 400, code?: string) {
     super(mensaje);
     this.name = "ApiError";
     this.codigo = codigo;
+    this.code = code;
   }
 }
 

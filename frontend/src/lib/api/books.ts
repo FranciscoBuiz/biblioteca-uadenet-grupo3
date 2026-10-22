@@ -1,4 +1,3 @@
-import { nombreSede, validarIsbn } from "@/lib/domain/rules";
 import type {
   Book,
   BookWithStock,
@@ -7,17 +6,28 @@ import type {
   EstadoEjemplar,
   SedeId,
 } from "@/lib/domain/types";
-import { demora, getDb, mutar } from "@/lib/store/db";
-import { buscarLibro, ejemplaresDe, librosConStock } from "@/lib/store/selectors";
+import {
+  aEjemplar,
+  aIndicadores,
+  aLibro,
+  aLibroConStock,
+  type BookDto,
+  type BookWithStockDto,
+  type CopyDto,
+  type Indicadores,
+  type IndicatorsDto,
+} from "./adaptadores";
 import { ApiError } from "./errors";
-import { nuevaActividad } from "./internal";
+import { consulta, pedir } from "./http";
 
 /* ---------------------------------------------------------------
-   GET  /api/v1/library/books?q=algoritmos
-   GET  /api/v1/library/books/{isbn}
-   POST /api/v1/library/books
-   PUT  /api/v1/library/books/{isbn}
-   POST /api/v1/library/books/{isbn}/copies
+   GET   /api/v1/library/books?q=algoritmos
+   GET   /api/v1/library/books/{isbn}
+   POST  /api/v1/library/books
+   PUT   /api/v1/library/books/{isbn}
+   PATCH /api/v1/library/books/{isbn}
+   POST  /api/v1/library/books/{isbn}/copies
+   PATCH /api/v1/library/books/{isbn}/copies/{code}
    --------------------------------------------------------------- */
 
 export interface FiltroCatalogo {
@@ -31,65 +41,45 @@ export interface FiltroCatalogo {
   orden?: "recientes" | "titulo" | "disponibilidad";
 }
 
+const ORDEN = { recientes: "recent", titulo: "title", disponibilidad: "availability" } as const;
+
 export async function getBooks(
   filtro: FiltroCatalogo = {},
 ): Promise<BookWithStock[]> {
-  await demora();
-
-  const {
-    q = "",
-    sede = "todas",
-    categoria,
-    soloStock = false,
-    incluirInactivos = false,
-    orden = "recientes",
-  } = filtro;
-
-  const texto = q.trim().toLowerCase();
-  let resultado = librosConStock(getDb());
-
-  if (!incluirInactivos) {
-    resultado = resultado.filter((l) => l.activo);
-  }
-
-  if (texto) {
-    resultado = resultado.filter(
-      (l) =>
-        l.titulo.toLowerCase().includes(texto) ||
-        l.autor.toLowerCase().includes(texto) ||
-        l.isbn.includes(texto),
-    );
-  }
-
-  if (categoria && categoria !== "Todas") {
-    resultado = resultado.filter((l) => l.categoria === categoria);
-  }
-
-  if (soloStock) {
-    resultado = resultado.filter((l) =>
-      sede === "todas" ? l.disponibles > 0 : l.porSede[sede] > 0,
-    );
-  }
-
-  const comparadores: Record<string, (a: BookWithStock, b: BookWithStock) => number> = {
-    titulo: (a, b) => a.titulo.localeCompare(b.titulo),
-    disponibilidad: (a, b) => b.disponibles - a.disponibles,
-    recientes: (a, b) => b.anio - a.anio,
-  };
-
-  return [...resultado].sort(comparadores[orden] ?? comparadores.recientes);
+  const { q, sede, categoria, soloStock, incluirInactivos, orden } = filtro;
+  const libros = await pedir<BookWithStockDto[]>(
+    "GET",
+    `/books${consulta({
+      q: q?.trim(),
+      siteId: sede === "todas" ? undefined : sede,
+      category: categoria === "Todas" ? undefined : categoria,
+      inStock: soloStock,
+      includeInactive: incluirInactivos,
+      sort: orden && ORDEN[orden],
+    })}`,
+  );
+  return libros.map(aLibroConStock);
 }
 
 export async function getBook(isbn: string): Promise<BookWithStock> {
-  await demora();
-  const libro = buscarLibro(getDb(), isbn);
-  if (!libro) throw new ApiError("No encontramos ese título en el catálogo.", 404);
-  return libro;
+  return aLibroConStock(await pedir<BookWithStockDto>("GET", `/books/${encodeURIComponent(isbn)}`));
 }
 
 export async function getCopies(isbn: string): Promise<Copy[]> {
-  await demora();
-  return ejemplaresDe(getDb(), isbn);
+  const lista = await pedir<CopyDto[]>("GET", `/books/${encodeURIComponent(isbn)}/copies`);
+  return lista.map(aEjemplar);
+}
+
+/** Categorias presentes en el catalogo activo, para los chips de filtro. */
+export async function getCategorias(): Promise<string[]> {
+  return pedir<string[]>("GET", "/categories");
+}
+
+/** Contadores de inventario, opcionalmente acotados a una sede. */
+export async function getIndicadores(sede: SedeId | "todas" = "todas"): Promise<Indicadores> {
+  return aIndicadores(
+    await pedir<IndicatorsDto>("GET", `/indicators${consulta({ siteId: sede === "todas" ? undefined : sede })}`),
+  );
 }
 
 export interface AltaLibro {
@@ -105,41 +95,24 @@ export interface AltaLibro {
   cantidad: number;
 }
 
+/** Los campos de un titulo tal como los espera el backend. */
+const cuerpoLibro = (d: Omit<AltaLibro, "isbn" | "sede" | "cantidad">) => ({
+  title: d.titulo.trim(),
+  author: d.autor.trim(),
+  publisher: d.editorial.trim(),
+  year: d.anio,
+  category: d.categoria,
+  description: d.descripcion.trim(),
+});
+
 export async function createBook(datos: AltaLibro): Promise<Book> {
-  await demora();
-
-  const errorIsbn = validarIsbn(datos.isbn);
-  if (errorIsbn) throw new ApiError(errorIsbn);
-
-  const isbn = datos.isbn.replace(/[\s-]/g, "");
-  if (getDb().libros.some((l) => l.isbn === isbn)) {
-    throw new ApiError("Ya existe un título con ese ISBN en el catálogo.", 409);
-  }
-
-  const libro: Book = {
-    isbn,
-    titulo: datos.titulo.trim(),
-    autor: datos.autor.trim(),
-    editorial: datos.editorial.trim(),
-    anio: datos.anio,
-    categoria: datos.categoria,
-    descripcion: datos.descripcion.trim(),
-    activo: true,
-  };
-
-  mutar((db) => ({
-    libros: [libro, ...db.libros],
-    ejemplares: [...db.ejemplares, ...generarEjemplares(db.ejemplares, isbn, datos.sede, datos.cantidad)],
-    actividad: [
-      nuevaActividad(
-        "alta_ejemplar",
-        `Alta de ${datos.cantidad} ${datos.cantidad === 1 ? "ejemplar" : "ejemplares"} · ${libro.titulo} — ${nombreSede(datos.sede)}`,
-      ),
-      ...db.actividad,
-    ],
-  }));
-
-  return libro;
+  const creado = await pedir<BookWithStockDto>("POST", "/books", {
+    isbn: datos.isbn.trim(),
+    ...cuerpoLibro(datos),
+    siteId: datos.sede,
+    quantity: datos.cantidad,
+  });
+  return aLibro(creado);
 }
 
 /** Campos editables de un titulo. El ISBN no se toca porque lo identifica. */
@@ -149,49 +122,12 @@ export async function updateBook(
   isbn: string,
   datos: EdicionLibro,
 ): Promise<Book> {
-  await demora();
-
-  const existente = getDb().libros.find((l) => l.isbn === isbn);
-  if (!existente) throw new ApiError("No encontramos ese título.", 404);
-
-  const actualizado: Book = {
-    ...existente,
-    ...datos,
-    titulo: datos.titulo.trim(),
-    autor: datos.autor.trim(),
-    editorial: datos.editorial.trim(),
-    descripcion: datos.descripcion.trim(),
-  };
-
-  mutar((db) => ({
-    libros: db.libros.map((l) => (l.isbn === isbn ? actualizado : l)),
-  }));
-
-  return actualizado;
+  return aLibro(await pedir<BookDto>("PUT", `/books/${encodeURIComponent(isbn)}`, cuerpoLibro(datos)));
 }
 
 /** Baja logica y reactivacion de un titulo (acciones de la pantalla 15). */
 export async function setBookActivo(isbn: string, activo: boolean): Promise<void> {
-  await demora();
-
-  const db = getDb();
-  const libro = db.libros.find((l) => l.isbn === isbn);
-  if (!libro) throw new ApiError("No encontramos ese título.", 404);
-
-  if (!activo) {
-    const prestados = db.ejemplares.filter(
-      (e) => e.isbn === isbn && e.estado === "prestado",
-    ).length;
-    if (prestados > 0) {
-      throw new ApiError(
-        `No se puede dar de baja: hay ${prestados} ${prestados === 1 ? "ejemplar prestado" : "ejemplares prestados"} sin devolver.`,
-      );
-    }
-  }
-
-  mutar((actual) => ({
-    libros: actual.libros.map((l) => (l.isbn === isbn ? { ...l, activo } : l)),
-  }));
+  await pedir<BookDto>("PATCH", `/books/${encodeURIComponent(isbn)}`, { active: activo });
 }
 
 export async function addCopies(
@@ -199,69 +135,30 @@ export async function addCopies(
   sede: SedeId,
   cantidad: number,
 ): Promise<Copy[]> {
-  await demora();
-
-  const db = getDb();
-  const libro = db.libros.find((l) => l.isbn === isbn);
-  if (!libro) throw new ApiError("No encontramos ese título.", 404);
-  if (cantidad < 1) throw new ApiError("La cantidad debe ser mayor a cero.");
-
-  const nuevos = generarEjemplares(db.ejemplares, isbn, sede, cantidad);
-
-  mutar((actual) => ({
-    ejemplares: [...actual.ejemplares, ...nuevos],
-    actividad: [
-      nuevaActividad(
-        "alta_ejemplar",
-        `Alta de ${cantidad} ${cantidad === 1 ? "ejemplar" : "ejemplares"} · ${libro.titulo} — ${nombreSede(sede)}`,
-      ),
-      ...actual.actividad,
-    ],
-  }));
-
-  return nuevos;
+  const nuevos = await pedir<CopyDto[]>("POST", `/books/${encodeURIComponent(isbn)}/copies`, {
+    siteId: sede,
+    quantity: cantidad,
+  });
+  return nuevos.map(aEjemplar);
 }
+
+const ESTADO_EJEMPLAR: Partial<Record<EstadoEjemplar, string>> = {
+  disponible: "available",
+  mantenimiento: "maintenance",
+  baja: "retired",
+};
 
 /** Cambia el estado de un ejemplar fisico (pantalla 19). */
 export async function setCopyEstado(
+  isbn: string,
   codigo: string,
   estado: EstadoEjemplar,
 ): Promise<void> {
-  await demora();
-
-  const ejemplar = getDb().ejemplares.find((e) => e.codigo === codigo);
-  if (!ejemplar) throw new ApiError("No encontramos ese ejemplar.", 404);
-  if (ejemplar.estado === "prestado") {
-    throw new ApiError(
-      "El ejemplar está prestado: registrá la devolución antes de cambiar su estado.",
-    );
-  }
-
-  mutar((db) => ({
-    ejemplares: db.ejemplares.map((e) =>
-      e.codigo === codigo ? { ...e, estado } : e,
-    ),
-  }));
-}
-
-/* --- Helpers -------------------------------------------------- */
-
-/** Genera codigos de inventario correlativos tipo BA-032, BA-033... */
-function generarEjemplares(
-  existentes: Copy[],
-  isbn: string,
-  sede: SedeId,
-  cantidad: number,
-): Copy[] {
-  const maximo = existentes.reduce((max, e) => {
-    const numero = Number(e.codigo.replace(/\D/g, ""));
-    return Number.isFinite(numero) && numero > max ? numero : max;
-  }, 0);
-
-  return Array.from({ length: cantidad }, (_, i) => ({
-    codigo: `BA-${String(maximo + i + 1).padStart(3, "0")}`,
-    isbn,
-    sede,
-    estado: "disponible" as const,
-  }));
+  const status = ESTADO_EJEMPLAR[estado];
+  if (!status) throw new ApiError("Ese estado no se puede asignar a mano.");
+  await pedir<CopyDto>(
+    "PATCH",
+    `/books/${encodeURIComponent(isbn)}/copies/${encodeURIComponent(codigo)}`,
+    { status },
+  );
 }

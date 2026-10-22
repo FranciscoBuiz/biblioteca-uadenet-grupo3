@@ -1,41 +1,44 @@
 import type { Notification } from "@/lib/domain/types";
-import { demora, getDb, mutar } from "@/lib/store/db";
-import {
-  filtrarNotificaciones,
-  type FiltroNotificaciones,
-} from "@/lib/store/selectors";
+import { aNotificacion, type NotificationDto } from "./adaptadores";
+import { leerSesion, pedir } from "./http";
 
 /* ---------------------------------------------------------------
-   GET  /api/v1/library/notifications
-   POST /api/v1/library/notifications/read
-
-   El filtrado vive en lib/store/selectors: para leer desde un
-   componente usa filtrarNotificaciones(db, userId, filtro) con el
-   db que devuelve useDb(), que repinta solo.
+   GET   /api/v1/library/notifications?filter=unread
+   POST  /api/v1/library/notifications/read-all
+   PATCH /api/v1/library/notifications/{id}
+   El backend filtra por el token.
    --------------------------------------------------------------- */
 
-export type { FiltroNotificaciones };
+export type FiltroNotificaciones =
+  | "todas"
+  | "sin_leer"
+  | "vencimientos"
+  | "sanciones";
+
+const FILTRO = {
+  todas: "all",
+  sin_leer: "unread",
+  vencimientos: "dueDates",
+  sanciones: "penalties",
+} as const;
+
+const propietario = () => leerSesion()?.usuario.id ?? "";
 
 export async function getNotifications(
-  userId: string,
   filtro: FiltroNotificaciones = "todas",
 ): Promise<Notification[]> {
-  await demora();
-  return filtrarNotificaciones(getDb(), userId, filtro);
+  const lista = await pedir<NotificationDto[]>("GET", `/notifications?filter=${FILTRO[filtro]}`);
+  return lista.map((n) => aNotificacion(n, propietario()));
 }
 
-export async function markAllRead(userId: string): Promise<void> {
-  mutar((db) => ({
-    notificaciones: db.notificaciones.map((n) =>
-      n.userId === userId ? { ...n, leida: true } : n,
-    ),
-  }));
+export async function getUnreadCount(): Promise<number> {
+  return (await getNotifications("sin_leer")).length;
+}
+
+export async function markAllRead(): Promise<void> {
+  await pedir<NotificationDto[]>("POST", "/notifications/read-all");
 }
 
 export async function markRead(id: string): Promise<void> {
-  mutar((db) => ({
-    notificaciones: db.notificaciones.map((n) =>
-      n.id === id ? { ...n, leida: true } : n,
-    ),
-  }));
+  await pedir<NotificationDto>("PATCH", `/notifications/${encodeURIComponent(id)}`, { read: true });
 }

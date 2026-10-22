@@ -1,42 +1,50 @@
-import { formatMonto, HOY, nuevaOperacion } from "@/lib/domain/rules";
 import type {
   MetodoPago,
   PaymentReceipt,
   PenaltyView,
 } from "@/lib/domain/types";
-import { demora, getDb, mutar } from "@/lib/store/db";
 import {
-  filtrarSanciones,
-  vistaSancion,
-  type FiltroSanciones,
-} from "@/lib/store/selectors";
-import { ApiError } from "./errors";
-import { nuevaActividad, nuevaNotificacion } from "./internal";
+  aComprobante,
+  aVistaSancion,
+  type PenaltyDto,
+  type ReceiptDto,
+} from "./adaptadores";
+import { consulta, pedir } from "./http";
 
 /* ---------------------------------------------------------------
    GET  /api/v1/library/penalties
-   POST /internal/v1/wallets/{userId}/debits
-        { amount, currency: "ARS", concept: "LIBRARY_FINE",
-          sourceModule: "library", externalReference: "penalty/{id}" }
-   POST /internal/v1/events
-        (eventType: library.penalty.applied.v1)
+   GET  /api/v1/library/penalties/{id}
+   POST /api/v1/library/penalties/{id}/payments
+   GET  /api/v1/wallets/me
+   El backend filtra por el token: el estudiante ve solo lo propio.
    --------------------------------------------------------------- */
 
-export type { FiltroSanciones };
+export interface FiltroSanciones {
+  estado?: "todas" | "cobradas" | "pendientes";
+  q?: string;
+}
+
+const ESTADO = { todas: "all", cobradas: "paid", pendientes: "pending" } as const;
 
 export async function getPenalties(
   filtro: FiltroSanciones = {},
 ): Promise<PenaltyView[]> {
-  await demora();
-  return filtrarSanciones(getDb(), filtro);
+  const { estado, q } = filtro;
+  const lista = await pedir<PenaltyDto[]>(
+    "GET",
+    `/penalties${consulta({ q: q?.trim(), status: estado && ESTADO[estado] })}`,
+  );
+  return lista.map(aVistaSancion);
 }
 
 export async function getPenalty(id: string): Promise<PenaltyView> {
-  await demora();
-  const db = getDb();
-  const sancion = db.sanciones.find((s) => s.id === id);
-  if (!sancion) throw new ApiError("No encontramos esa sanción.", 404);
-  return vistaSancion(db, sancion);
+  return aVistaSancion(await pedir<PenaltyDto>("GET", `/penalties/${encodeURIComponent(id)}`));
+}
+
+/** Saldo institucional del usuario, en pesos. */
+export async function getSaldo(): Promise<number> {
+  const { balance } = await pedir<{ balance: string }>("GET", "/api/v1/wallets/me");
+  return Number(balance);
 }
 
 /** Unico medio de pago aceptado para las multas de la biblioteca. */
@@ -46,56 +54,9 @@ export const METODO_PAGO: { id: MetodoPago; nombre: string; detalle: string } = 
   detalle: "Se debita de tu cuenta UADEnet al confirmar.",
 };
 
-/**
- * Regulariza una multa debitando el saldo institucional del alumno.
- *
- * Contra el backend real esto dispara el debito en la wallet del alumno y el
- * evento library.penalty.applied.v1 descritos en el xlsx.
- */
+/** Regulariza una multa: el backend debita la wallet del alumno y emite el comprobante. */
 export async function payPenalty(penaltyId: string): Promise<PaymentReceipt> {
-  await demora(320);
-
-  const db = getDb();
-  const sancion = db.sanciones.find((s) => s.id === penaltyId);
-  if (!sancion) throw new ApiError("No encontramos esa sanción.", 404);
-  if (sancion.estado === "cobrada") {
-    throw new ApiError("Esta multa ya fue abonada.");
-  }
-
-  const libro = db.libros.find((l) => l.isbn === sancion.isbn);
-  const estudiante = db.usuarios.find((u) => u.id === sancion.userId);
-
-  const comprobante: PaymentReceipt = {
-    operacion: nuevaOperacion(),
-    penaltyId,
-    monto: sancion.monto,
-    metodo: METODO_PAGO.id,
-    fecha: HOY,
-  };
-
-  mutar((actual) => ({
-    sanciones: actual.sanciones.map((s) =>
-      s.id === penaltyId
-        ? { ...s, estado: "cobrada" as const, fechaCobro: HOY }
-        : s,
-    ),
-    notificaciones: [
-      nuevaNotificacion(
-        sancion.userId,
-        "sancion",
-        "Sanción regularizada",
-        `Registramos el pago de ${formatMonto(sancion.monto)} por la multa ${penaltyId}. Ya podés volver a solicitar préstamos.`,
-      ),
-      ...actual.notificaciones,
-    ],
-    actividad: [
-      nuevaActividad(
-        "sancion",
-        `Multa cobrada · ${penaltyId} — ${estudiante?.nombre ?? "Estudiante"}${libro ? ` (${libro.titulo})` : ""}`,
-      ),
-      ...actual.actividad,
-    ],
-  }));
-
-  return comprobante;
+  return aComprobante(
+    await pedir<ReceiptDto>("POST", `/penalties/${encodeURIComponent(penaltyId)}/payments`),
+  );
 }

@@ -1,10 +1,11 @@
-import { demora, getDb, mutar } from "@/lib/store/db";
 import type { User } from "@/lib/domain/types";
+import { aUsuario, type LectorDto } from "./adaptadores";
 import { ApiError } from "./errors";
+import { borrarSesion, guardarSesion, leerSesion, pedir } from "./http";
 
 /* ---------------------------------------------------------------
    POST /api/v1/auth/login
-   Body: { email, password }  (ver UADEnet_Biblioteca_Grupo3.xlsx)
+   Body: { email, password }  ->  { token, user }
    --------------------------------------------------------------- */
 
 /** Credenciales que se muestran en la pantalla de login de la demo. */
@@ -21,12 +22,7 @@ export const CUENTAS_DEMO = [
   },
 ] as const;
 
-/** Contraseña única de la demo. Sin backend no hay nada que verificar de verdad. */
-const PASSWORD_DEMO = "uade1234";
-
 export async function login(email: string, password: string): Promise<User> {
-  await demora();
-
   const normalizado = email.trim().toLowerCase();
 
   if (!normalizado) throw new ApiError("Ingresá tu mail institucional.");
@@ -35,25 +31,21 @@ export async function login(email: string, password: string): Promise<User> {
   }
   if (!password) throw new ApiError("Ingresá tu contraseña.");
 
-  const usuario = getDb().usuarios.find(
-    (u) => u.email.toLowerCase() === normalizado,
+  const { token, user } = await pedir<{ token: string; user: LectorDto }>(
+    "POST",
+    "/api/v1/auth/login",
+    { email: normalizado, password },
   );
-
-  if (!usuario || password !== PASSWORD_DEMO) {
-    throw new ApiError("El mail o la contraseña no son correctos.", 401);
-  }
-
-  mutar(() => ({ sesion: usuario.id }));
+  const usuario = aUsuario(user);
+  guardarSesion({ token, usuario });
   return usuario;
 }
 
 export async function logout(): Promise<void> {
-  mutar(() => ({ sesion: null }));
+  borrarSesion();
 }
 
 /** Usuario de la sesión actual, o null si nadie inició sesión. */
 export function usuarioActual(): User | null {
-  const db = getDb();
-  if (!db.sesion) return null;
-  return db.usuarios.find((u) => u.id === db.sesion) ?? null;
+  return leerSesion()?.usuario ?? null;
 }

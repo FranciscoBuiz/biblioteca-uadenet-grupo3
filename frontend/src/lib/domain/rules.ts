@@ -36,14 +36,9 @@ export const MAX_RENOVACIONES = 2;
 /** Cuando faltan estos dias o menos, el prestamo esta proximo a vencer. */
 export const DIAS_PROXIMO_A_VENCER = 3;
 
-/**
- * Fecha de referencia de la demo.
- *
- * La maqueta esta fechada el 26/08/2026, asi que fijamos ese dia como "hoy"
- * para que los datos sembrados coincidan exactamente con las capturas del
- * PDF. Al conectar el backend real, reemplazar por `new Date()`.
- */
-export const HOY: FechaISO = "2026-08-26";
+/** Fecha de hoy en horario local. */
+// shortcut: se calcula al cargar la página, queda viejo si la pestaña cruza la medianoche
+export const HOY: FechaISO = aISO(new Date());
 
 /**
  * Categorias del catalogo, en el orden en que se ofrecen en los formularios.
