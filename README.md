@@ -10,11 +10,11 @@ Barbieri · Brandt · Buiz · Marinoni · Sanguineti
 
 ## Componentes
 
-Monorepo con npm workspaces. Cada carpeta tiene su README.
+Monorepo con npm workspaces. `core/`, `library/` y `backoffice/` tienen su README.
 
 | Carpeta | Qué es | Puerto |
 |---|---|---|
-| `frontend/` | Next.js 15 + React 19. Las 22 pantallas; habla solo con el CORE por HTTP | 3000 |
+| `frontend/` | Next.js 15 + React 19. Pantallas de estudiante y bibliotecario; habla solo con el CORE por HTTP | 3000 |
 | `core/` | CORE simulado: login con JWT, Gateway hacia la Biblioteca, billetera, eventos, usuarios | 4000 |
 | `library/` | Biblioteca, el producto real: rutas, servicios con las reglas de negocio, repositorio MariaDB, consumidor RabbitMQ | 4001 (solo 127.0.0.1) |
 | `backoffice/` | Backoffice simulado: CLI que publica mensajes en RabbitMQ | — |
@@ -29,7 +29,7 @@ tener store local y `localStorage`; los datos y las reglas viven en `library/`.
 npm install                                  # en la raíz (workspaces)
 cp .env.example .env                         # credenciales de MariaDB para docker compose
 cp core/.env.example core/.env
-cp library/.env.example library/.env         # completar <pass> en DATABASE_URL con MARIADB_PASSWORD
+cp library/.env.example library/.env
 cp frontend/.env.example frontend/.env
 docker compose up -d                         # RabbitMQ (5672, panel 15672) y MariaDB (3306)
 npm run dev                                  # frontend, core y library en paralelo
@@ -44,8 +44,9 @@ Abrir `http://localhost:3000`. Otros comandos: `npm test`, `npm run typecheck`,
 |---|---|---|
 | Estudiante | `ana.garcia@uade.edu.ar` | `uade1234` |
 | Bibliotecaria | `laura.fernandez@uade.edu.ar` | `uade1234` |
+| Estudiante sin saldo (`u-camila`) | `camila.ruiz@uade.edu.ar` | `uade1234` |
 
-Ana tiene saldo ($5000). El estudiante **sin saldo** es `u-camila` (ver
+Ana tiene saldo ($5000). Camila tiene saldo 0 (ver
 `core/README.md`): sirve para probar el rechazo `INSUFFICIENT_FUNDS` al pagar una
 multa. El login tiene atajos para las dos cuentas principales.
 
@@ -84,7 +85,13 @@ conector oficial, sin ORM), implementada como un `Repositorio` más.
   el esquema y el seed.
 
 ```bash
-MARIADB_TEST_URL=mariadb://biblioteca:<pass>@127.0.0.1:3306/biblioteca_test npm test -w @uadenet/library
+MARIADB_TEST_URL=mariadb://biblioteca:biblioteca-dev@127.0.0.1:3306/biblioteca_test npm test -w @uadenet/library
+```
+
+En PowerShell:
+
+```powershell
+$env:MARIADB_TEST_URL="mariadb://biblioteca:biblioteca-dev@127.0.0.1:3306/biblioteca_test"; npm test -w @uadenet/library
 ```
 
 `docker/mariadb-init.sql` crea `biblioteca_test`, pero solo cuando el volumen

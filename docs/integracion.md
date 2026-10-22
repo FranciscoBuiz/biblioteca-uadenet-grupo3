@@ -75,7 +75,7 @@ base es acoplamiento fuerte.
 
 El Gateway reusa el `X-Correlation-Id` del cliente o genera uno, lo reenvía a la
 Biblioteca, y la Biblioteca lo propaga en cada llamada al CORE. Se ve en la
-terminal de `npm run dev` (cada línea empieza con el id):
+terminal de `npm run dev` (cada línea empieza con `[core]` o `[library]` y luego viene el id):
 
 ```
 [core] 7c1e…  → library POST /api/v1/library/penalties/SAN-00031/payments 201
