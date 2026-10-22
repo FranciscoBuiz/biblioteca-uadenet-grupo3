@@ -17,6 +17,20 @@ docker compose up -d      # RabbitMQ (5672, panel en 15672) y MariaDB (3306)
 npm run dev               # frontend en http://localhost:3000
 ```
 
+Los tests de MariaDB corren contra una base aparte, porque borran todas las
+tablas. Para correrlos:
+
+```bash
+MARIADB_TEST_URL=mariadb://biblioteca:<pass>@127.0.0.1:3306/biblioteca_test npm test -w @uadenet/library
+```
+
+`docker/mariadb-init.sql` crea `biblioteca_test`, pero solo cuando el volumen
+`mariadb-datos` es nuevo. Si el volumen ya existía, creala una vez a mano:
+
+```bash
+docker compose exec mariadb mariadb -uroot -p<MARIADB_ROOT_PASSWORD> -e "CREATE DATABASE IF NOT EXISTS biblioteca_test; GRANT ALL ON biblioteca_test.* TO 'biblioteca'@'%';"
+```
+
 Otros comandos:
 
 ```bash

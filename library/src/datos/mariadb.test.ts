@@ -8,6 +8,11 @@ const url = process.env.MARIADB_TEST_URL;
 
 if (!url) {
   test.skip("mariadb: MARIADB_TEST_URL no definida");
+} else if (!new URL(url).pathname.slice(1).endsWith("_test")) {
+  // Los tests borran todas las tablas: nunca contra la base de desarrollo.
+  test("mariadb: MARIADB_TEST_URL debe apuntar a una base terminada en _test (ej. biblioteca_test)", () => {
+    assert.fail(`MARIADB_TEST_URL apunta a "${new URL(url).pathname.slice(1)}"; usá una base *_test, los tests borran todas las tablas`);
+  });
 } else {
   const pool = mariadb.createPool(url);
   after(() => pool.end());

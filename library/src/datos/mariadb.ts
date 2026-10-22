@@ -116,7 +116,7 @@ async function ejecutar<T>(pool: mariadb.Pool, trabajo: (repo: Repositorio, con:
     await con.rollback().catch(() => undefined);
     throw e;
   } finally {
-    await con.release();
+    await con.release().catch(() => undefined);
   }
 }
 

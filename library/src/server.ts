@@ -17,9 +17,10 @@ if (!serviceKey || !gatewayKey || !databaseUrl) {
 }
 const puerto = Number(env("PORT", "4001"));
 
-const pool = mariadb.createPool(databaseUrl);
-const repo = await crearRepositorioMariaDB(pool, hoyReal()).catch((e: Error) => {
-  console.error(`[library] No se pudo conectar a MariaDB en ${new URL(databaseUrl).host}. ¿Levantaste \`docker compose up -d\`?`);
+// URL.canParse evita que una DATABASE_URL mal escrita tire una excepcion en vez del mensaje.
+const host = URL.canParse(databaseUrl) ? new URL(databaseUrl).host : "(DATABASE_URL inválida)";
+const repo = await (async () => crearRepositorioMariaDB(mariadb.createPool(databaseUrl), hoyReal()))().catch((e: Error) => {
+  console.error(`[library] No se pudo conectar a MariaDB en ${host}. ¿Levantaste \`docker compose up -d\`?`);
   console.error(`[library] ${e.message}`);
   process.exit(1);
 });
