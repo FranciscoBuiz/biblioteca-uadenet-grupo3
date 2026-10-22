@@ -20,23 +20,122 @@ Monorepo con npm workspaces. `core/`, `library/` y `backoffice/` tienen su READM
 | `backoffice/` | Backoffice simulado: CLI que publica mensajes en RabbitMQ | — |
 | `docs/` | `integracion.md` (contratos entre módulos) y specs | — |
 
-La intro "Frontend del módulo…" de la Entrega 1 ya no aplica: el frontend dejó de
-tener store local y `localStorage`; los datos y las reglas viven en `library/`.
+## Qué necesitás
 
-## Cómo levantarlo
+| Herramienta | Versión | Para qué |
+|---|---|---|
+| [Node.js](https://nodejs.org) | **22 o superior** (trae npm 10) | frontend, CORE, Biblioteca y Backoffice |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | cualquiera reciente, con Docker Compose | RabbitMQ y MariaDB |
+| Git | cualquiera | clonar el repo |
+
+Además, estos puertos tienen que estar libres: **3000** (frontend), **4000**
+(CORE), **4001** (Biblioteca), **5672** y **15672** (RabbitMQ) y **3306**
+(MariaDB).
+
+Para comprobar las versiones:
 
 ```bash
-npm install                                  # en la raíz (workspaces)
-cp .env.example .env                         # credenciales de MariaDB para docker compose
-cp core/.env.example core/.env
-cp library/.env.example library/.env
-cp frontend/.env.example frontend/.env
-docker compose up -d                         # RabbitMQ (5672, panel 15672) y MariaDB (3306)
-npm run dev                                  # frontend, core y library en paralelo
+node --version      # v22.x o mayor
+docker --version
+docker compose version
 ```
 
-Abrir `http://localhost:3000` (no `127.0.0.1`: el CORE solo permite CORS desde ese origen). Si el CORE está caído, los eventos de multa que la Biblioteca intenta enviarle solo se registran en el log y no se reintentan. Otros comandos: `npm test`, `npm run typecheck`,
-`npm run build -w @uadenet/frontend`, `npm run lint -w @uadenet/frontend`.
+## Instalación desde cero (una sola vez)
+
+1. **Clonar el repo y entrar a la carpeta.**
+
+   ```bash
+   git clone <url-del-repo> biblioteca-uadenet
+   cd biblioteca-uadenet
+   ```
+
+2. **Instalar las dependencias.** Se hace una sola vez, en la raíz; npm instala
+   las de los cuatro componentes (workspaces).
+
+   ```bash
+   npm install
+   ```
+
+3. **Crear los archivos de configuración** copiando los de ejemplo. Los valores de
+   ejemplo ya funcionan para desarrollo local; no hace falta editarlos.
+
+   En Git Bash, macOS o Linux:
+
+   ```bash
+   cp .env.example .env
+   cp core/.env.example core/.env
+   cp library/.env.example library/.env
+   cp frontend/.env.example frontend/.env
+   ```
+
+   En PowerShell:
+
+   ```powershell
+   Copy-Item .env.example .env
+   Copy-Item core/.env.example core/.env
+   Copy-Item library/.env.example library/.env
+   Copy-Item frontend/.env.example frontend/.env
+   ```
+
+4. **Abrir Docker Desktop** y esperar a que diga que está corriendo (en Windows,
+   el ícono de la ballena deja de animarse).
+
+5. **Levantar RabbitMQ y MariaDB.** La primera vez descarga las imágenes y tarda
+   unos minutos.
+
+   ```bash
+   docker compose up -d
+   docker compose ps          # los dos servicios tienen que figurar "running"
+   ```
+
+La primera vez que arranca la Biblioteca crea sola las tablas en MariaDB y carga
+los datos de la demo; no hay que correr ningún script de base de datos.
+
+## Cómo ejecutarlo (cada vez)
+
+1. Abrir Docker Desktop.
+2. En la raíz del proyecto:
+
+   ```bash
+   docker compose up -d       # RabbitMQ y MariaDB (si ya estaban, no hace nada)
+   npm run dev                # frontend, CORE y Biblioteca en paralelo
+   ```
+
+3. Abrir **http://localhost:3000** e iniciar sesión con una de las
+   [cuentas de la demo](#cuentas-de-la-demo). Usá `localhost`, no `127.0.0.1`:
+   el CORE solo acepta pedidos (CORS) desde ese origen.
+
+Para saber si arrancó bien, en la terminal de `npm run dev` tienen que aparecer:
+
+- `[library] consumidor RabbitMQ listo (cola library.backoffice)`
+- `[core] escuchando en 127.0.0.1:4000` y `[library] escuchando en 127.0.0.1:4001`
+- `Ready` del frontend (Next.js)
+
+**Para detenerlo:** `Ctrl+C` en la terminal de `npm run dev`, y
+`docker compose stop` para apagar RabbitMQ y MariaDB (los datos se conservan).
+
+## Problemas comunes
+
+| Síntoma | Causa y solución |
+|---|---|
+| `RabbitMQ no disponible …; reintento en 5 s` en el log | RabbitMQ está apagado. Correr `docker compose up -d`; la Biblioteca se reconecta sola. Mientras tanto la app funciona igual |
+| La Biblioteca termina con `No se pudo conectar a MariaDB` | MariaDB está apagada o Docker Desktop no está abierto. Abrir Docker y correr `docker compose up -d` |
+| `error during connect … dockerDesktopLinuxEngine` | Docker Desktop no está corriendo. Abrirlo y esperar a que termine de iniciar |
+| `EADDRINUSE` en 3000, 4000 o 4001 | Quedó otra instancia corriendo. Cerrar la otra terminal de `npm run dev` (o el proceso `node`) y volver a arrancar |
+| El login falla con error de red o CORS | Abrir la app en `http://localhost:3000`, no en `127.0.0.1:3000` |
+| Los préstamos de la demo aparecen todos vencidos | Los datos se cargaron hace muchos días. Resetearlos: ver [Base de datos](#base-de-datos-mariadb) |
+
+Si el CORE está caído, los eventos de multa que la Biblioteca intenta enviarle
+solo se registran en el log y no se reintentan.
+
+## Otros comandos
+
+```bash
+npm test                                  # tests de core y library (MariaDB se saltea sin MARIADB_TEST_URL)
+npm run typecheck                         # TypeScript en los cuatro componentes
+npm run build -w @uadenet/frontend        # build de producción del frontend
+npm run lint -w @uadenet/frontend
+```
 
 ## Cuentas de la demo
 
