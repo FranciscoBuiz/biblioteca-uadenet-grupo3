@@ -4,3 +4,17 @@ services:
     ports:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:15672:15672"
+  mariadb:
+    image: mariadb:11.4
+    ports:
+      - "127.0.0.1:3306:3306"
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - mariadb-datos:/var/lib/mysql
+
+volumes:
+  mariadb-datos:

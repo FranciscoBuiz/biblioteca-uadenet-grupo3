@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { crearRepositorioEnMemoria } from "./datos/memoria.js";
+import * as mariadb from "mariadb";
+import { crearRepositorioMariaDB } from "./datos/mariadb.js";
 import { hoyReal } from "./dominio/reglas.js";
 import { crearApp } from "./http/app.js";
 import { iniciarConsumidor } from "./integracion/backoffice.js";
@@ -9,13 +10,19 @@ import { detectarAtrasos } from "./servicios/deteccion.js";
 const env = (k: string, d = "") => process.env[k] || d;
 const serviceKey = env("SERVICE_KEY");
 const gatewayKey = env("GATEWAY_KEY");
-if (!serviceKey || !gatewayKey) {
-  console.error("[library] Faltan SERVICE_KEY o GATEWAY_KEY. Copiá library/.env.example a library/.env.");
+const databaseUrl = env("DATABASE_URL");
+if (!serviceKey || !gatewayKey || !databaseUrl) {
+  console.error("[library] Faltan SERVICE_KEY, GATEWAY_KEY o DATABASE_URL. Copiá library/.env.example a library/.env.");
   process.exit(1);
 }
 const puerto = Number(env("PORT", "4001"));
 
-const repo = crearRepositorioEnMemoria(hoyReal()); // Task 12: MariaDB
+const pool = mariadb.createPool(databaseUrl);
+const repo = await crearRepositorioMariaDB(pool, hoyReal()).catch((e: Error) => {
+  console.error(`[library] No se pudo conectar a MariaDB en ${new URL(databaseUrl).host}. ¿Levantaste \`docker compose up -d\`?`);
+  console.error(`[library] ${e.message}`);
+  process.exit(1);
+});
 const core = new CoreHttp(env("CORE_URL", "http://127.0.0.1:4000"), serviceKey);
 const app = crearApp({ repo, core, gatewayKey });
 

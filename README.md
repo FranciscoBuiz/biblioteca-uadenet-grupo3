@@ -12,7 +12,8 @@ Barbieri · Brandt · Buiz · Marinoni · Sanguineti
 
 ```bash
 npm install               # en la raíz (workspaces)
-docker compose up -d      # RabbitMQ (5672, panel en 15672)
+cp .env.example .env      # credenciales de desarrollo de MariaDB
+docker compose up -d      # RabbitMQ (5672, panel en 15672) y MariaDB (3306)
 npm run dev               # frontend en http://localhost:3000
 ```
 
