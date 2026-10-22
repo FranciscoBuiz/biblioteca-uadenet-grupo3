@@ -142,7 +142,7 @@ export default function Catalogo() {
             {resultados.map((libro) => (
               <li key={libro.isbn}>
                 <Card padding={false} className="flex h-full flex-col p-3.5">
-                  <Portada titulo={libro.titulo} tamano="md" mostrarTitulo />
+                  <Portada titulo={libro.titulo} tamano="md" mostrarTitulo isbn={libro.isbn} />
 
                   <h2 className="mt-2.5 text-sm font-semibold">
                     {libro.titulo}

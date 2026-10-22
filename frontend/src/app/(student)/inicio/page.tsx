@@ -138,7 +138,7 @@ export default function InicioEstudiante() {
                       key={prestamo.id}
                       className="flex items-center gap-4 border-b border-borde-fino px-5 py-3.5 last:border-b-0"
                     >
-                      <Portada titulo={prestamo.libro.titulo} tamano="xs" />
+                      <Portada titulo={prestamo.libro.titulo} tamano="xs" isbn={prestamo.libro.isbn} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">
                           {prestamo.libro.titulo}

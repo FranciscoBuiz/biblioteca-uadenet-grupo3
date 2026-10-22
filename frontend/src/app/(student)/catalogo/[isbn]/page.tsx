@@ -157,7 +157,7 @@ export default function DetalleLibro() {
       <Contenido>
         <div className="grid gap-5 lg:grid-cols-[250px_1fr] lg:items-start lg:gap-6">
           <Card className="flex justify-center">
-            <Portada titulo={libro.titulo} tamano="lg" mostrarTitulo />
+            <Portada titulo={libro.titulo} tamano="lg" mostrarTitulo isbn={libro.isbn} />
           </Card>
 
           <div className="min-w-0">

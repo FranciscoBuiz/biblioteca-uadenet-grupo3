@@ -273,7 +273,7 @@ export function FormularioLibro({
         </GrillaCampos>
       </div>
 
-      <CampoPortada titulo={valores.titulo} />
+      <CampoPortada titulo={valores.titulo} isbn={valores.isbn} />
 
       {avisoExtra && <div className="mt-4">{avisoExtra}</div>}
 
@@ -304,12 +304,12 @@ export function FormularioLibro({
  * backend no hay donde subir un archivo, asi que mostramos la portada generada
  * y lo aclaramos en lugar de ofrecer un upload que no haria nada.
  */
-function CampoPortada({ titulo }: { titulo: string }) {
+function CampoPortada({ titulo, isbn }: { titulo: string; isbn: string }) {
   return (
     <div className="mt-4">
       <p className="mb-1.5 text-xs font-semibold text-grafito">Portada</p>
       <div className="flex items-center gap-4 rounded-[10px] border border-dashed border-borde-fuerte bg-[#FBFCFD] px-4 py-3.5">
-        <Portada titulo={titulo || "Sin título"} tamano="sm" />
+        <Portada titulo={titulo || "Sin título"} tamano="sm" isbn={isbn} />
         <p className="text-xs leading-relaxed text-tenue">
           La portada se genera a partir del título. Sin backend no hay dónde
           subir una imagen, así que el catálogo usa esta trama para todos los
