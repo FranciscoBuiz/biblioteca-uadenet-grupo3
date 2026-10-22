@@ -77,7 +77,7 @@ export function BotonNotificaciones() {
             {noLeidas > 0 && (
               <button
                 type="button"
-                onClick={() => markAllRead()}
+                onClick={() => markAllRead().catch(() => {})}
                 className="text-xs font-semibold text-secundario hover:text-institucional"
               >
                 Marcar leídas

@@ -57,6 +57,11 @@ test("crearLibro con cantidad 0 → 400 INVALID_QUANTITY", async () => {
   await assert.rejects(crearLibro(repo, { ...alta, cantidad: 0 }, HOY), rechazo("INVALID_QUANTITY", 400));
 });
 
+test("crearLibro con más de 50 ejemplares → 400 INVALID_QUANTITY", async () => {
+  const repo = crearRepositorioEnMemoria(HOY);
+  await assert.rejects(crearLibro(repo, { ...alta, cantidad: 51 }, HOY), rechazo("INVALID_QUANTITY", 400));
+});
+
 test("editarLibro ignora las claves isbn y activo", async () => {
   const repo = crearRepositorioEnMemoria(HOY);
   await crearLibro(repo, alta, HOY);

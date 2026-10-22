@@ -15,7 +15,7 @@ Monorepo con npm workspaces. `core/`, `library/` y `backoffice/` tienen su READM
 | Carpeta | Qué es | Puerto |
 |---|---|---|
 | `frontend/` | Next.js 15 + React 19. Pantallas de estudiante y bibliotecario; habla solo con el CORE por HTTP | 3000 |
-| `core/` | CORE simulado: login con JWT, Gateway hacia la Biblioteca, billetera, eventos, usuarios | 4000 |
+| `core/` | CORE simulado: login con JWT, Gateway hacia la Biblioteca, billetera, eventos, usuarios | 4000 (solo 127.0.0.1) |
 | `library/` | Biblioteca, el producto real: rutas, servicios con las reglas de negocio, repositorio MariaDB, consumidor RabbitMQ | 4001 (solo 127.0.0.1) |
 | `backoffice/` | Backoffice simulado: CLI que publica mensajes en RabbitMQ | — |
 | `docs/` | `integracion.md` (contratos entre módulos) y specs | — |
@@ -35,7 +35,7 @@ docker compose up -d                         # RabbitMQ (5672, panel 15672) y Ma
 npm run dev                                  # frontend, core y library en paralelo
 ```
 
-Abrir `http://localhost:3000`. Otros comandos: `npm test`, `npm run typecheck`,
+Abrir `http://localhost:3000` (no `127.0.0.1`: el CORE solo permite CORS desde ese origen). Si el CORE está caído, los eventos de multa que la Biblioteca intenta enviarle solo se registran en el log y no se reintentan. Otros comandos: `npm test`, `npm run typecheck`,
 `npm run build -w @uadenet/frontend`, `npm run lint -w @uadenet/frontend`.
 
 ## Cuentas de la demo

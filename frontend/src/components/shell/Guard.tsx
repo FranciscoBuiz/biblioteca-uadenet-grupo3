@@ -9,9 +9,9 @@ import { AppShell } from "./AppShell";
 /* ---------------------------------------------------------------
    Corta el acceso a un area segun el rol.
 
-   Sin backend no hay sesion de verdad que validar: alcanza con
-   mirar el usuario del store y, si no corresponde, mandarlo al
-   login o al inicio de su propio perfil.
+   Es solo UX: mira el usuario de la sesion local y, si no
+   corresponde, lo manda al login o al inicio de su perfil. La
+   autorizacion de verdad la hace el backend.
    --------------------------------------------------------------- */
 
 export function Guard({

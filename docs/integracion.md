@@ -11,13 +11,13 @@ string con dos decimales y la moneda es siempre `ARS`.
 
 | Módulo | Dirección | Canal | Identificador | Estructura | Ejemplo |
 |---|---|---|---|---|---|
-| CORE | CORE → Biblioteca | REST síncrono (Gateway) | `ALL /api/v1/library/*` | El Gateway valida el JWT y reenvía con `X-User-Id`, `X-User-Roles`, `X-User-Permissions`, `X-Gateway-Key`, `X-Correlation-Id` | `X-User-Id: u-ana`, `X-User-Roles: estudiante` |
+| CORE | CORE → Biblioteca | REST síncrono (Gateway) | `ALL /api/v1/library/*` | El Gateway valida el JWT y reenvía con `X-User-Id`, `X-User-Roles`, `X-User-Permissions`, `X-Gateway-Key`, `X-Correlation-Id` | `X-User-Id: u-ana`, `X-User-Roles: student` |
 | CORE | Frontend → CORE | REST síncrono | `POST /api/v1/auth/login` | Req `{email, password}`; res `{token, user}` (JWT HS256) | `{"email":"ana.garcia@uade.edu.ar","password":"uade1234"}` |
 | CORE | Biblioteca → CORE | REST síncrono | `POST /internal/v1/wallets/{userId}/debits` | Req `{amount, currency, concept, sourceModule, externalReference}`; res `{operationId, balance}`. 409 `INSUFFICIENT_FUNDS` si no alcanza. Idempotente por `externalReference` | `{"amount":"2500.00","currency":"ARS","concept":"LIBRARY_FINE","sourceModule":"library","externalReference":"penalty/SAN-00031"}` |
 | CORE | Biblioteca → CORE | REST síncrono | `POST /internal/v1/events` | `{eventType, source, subject, data}`; res 202. `GET` del mismo path lista los eventos | `{"eventType":"library.penalty.applied.v1","source":"library","subject":"user/u-camila","data":{"userId":"u-camila","loanId":"PRE-1001","daysLate":18,"amount":"2500.00","currency":"ARS"}}` |
 | Backoffice | Backoffice → Biblioteca | Cola asíncrona (AMQP) | `backoffice.rate.changed.v1` | `{rateType, amount, currency, effectiveFrom}` | `{"rateType":"LIBRARY_LATE_FEE","amount":"3000","currency":"ARS","effectiveFrom":"2026-11-01"}` |
 | Backoffice | Backoffice → Biblioteca | Cola asíncrona (AMQP) | `backoffice.location.upserted.v1` | `{locationId, siteId, name, capacity, status}` | `{"locationId":"loc-1a2b3c4d","siteId":"sede-monserrat","name":"Biblioteca - PB","capacity":120,"status":"ACTIVE"}` |
-| CORE (*) | Biblioteca → CORE | REST síncrono | `GET /internal/v1/users?ids=a,b` o `?q=` | Res: lista de `{id, name, email, studentId, nationalId, role, defaultSiteId, initials, label}`. `q` busca por nombre, mail, legajo o DNI | `GET /internal/v1/users?q=40123456` |
+| CORE (*) | Biblioteca → CORE | REST síncrono | `GET /internal/v1/users?ids=a,b` o `?q=` | Res: lista de `{id, name, email, studentId, nationalId, role, defaultSiteId, initials, label}`. `q` busca por nombre, mail, legajo o DNI | `GET /internal/v1/users?q=41.222.333` |
 | CORE (*) | Frontend → CORE | REST síncrono | `GET /api/v1/wallets/me` (Bearer) | Res `{balance, currency}` | `{"balance":"5000.00","currency":"ARS"}` |
 
 Reglas del consumidor de `rate.changed.v1`: un `rateType` distinto de

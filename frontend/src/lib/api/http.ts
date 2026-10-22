@@ -122,11 +122,11 @@ export async function pedir<T>(metodo: string, ruta: string, cuerpo?: unknown): 
   }
 
   if (!res.ok) {
-    if (res.status === 401 && ruta !== RUTA_LOGIN) {
+    const e = (datos ?? {}) as { code?: string; message?: string };
+    if (res.status === 401 && e.code === "INVALID_TOKEN" && ruta !== RUTA_LOGIN) {
       borrarSesion();
       window.location.assign("/login");
     }
-    const e = (datos ?? {}) as { code?: string; message?: string };
     throw new ApiError(e.message ?? "Ocurrió un error inesperado. Intentá de nuevo.", res.status, e.code);
   }
 

@@ -7,4 +7,4 @@ const app = crearApp({
   frontendOrigin: env("FRONTEND_ORIGIN", "http://localhost:3000"), log: true,
 });
 const puerto = Number(env("PORT", "4000"));
-app.listen(puerto, () => console.log(`[core] escuchando en :${puerto}`));
+app.listen(puerto, "127.0.0.1", () => console.log(`[core] escuchando en 127.0.0.1:${puerto}`));

@@ -300,9 +300,8 @@ export function FormularioLibro({
 /**
  * Recuadro de portada del mockup.
  *
- * La maqueta no usa imagenes reales (dibuja la trama diagonal del lomo) y sin
- * backend no hay donde subir un archivo, asi que mostramos la portada generada
- * y lo aclaramos en lugar de ofrecer un upload que no haria nada.
+ * No hay upload de archivos: mostramos la portada que exista para el ISBN o,
+ * si no hay, un recuadro con el titulo, y lo aclaramos.
  */
 function CampoPortada({ titulo, isbn }: { titulo: string; isbn: string }) {
   return (
@@ -311,9 +310,8 @@ function CampoPortada({ titulo, isbn }: { titulo: string; isbn: string }) {
       <div className="flex items-center gap-4 rounded-[10px] border border-dashed border-borde-fuerte bg-[#FBFCFD] px-4 py-3.5">
         <Portada titulo={titulo || "Sin título"} tamano="sm" isbn={isbn} />
         <p className="text-xs leading-relaxed text-tenue">
-          La portada se genera a partir del título. Sin backend no hay dónde
-          subir una imagen, así que el catálogo usa esta trama para todos los
-          títulos, igual que la maqueta.
+          Si hay una imagen de portada para este ISBN, se muestra. Si no, el
+          catálogo usa un recuadro con el título.
         </p>
       </div>
     </div>

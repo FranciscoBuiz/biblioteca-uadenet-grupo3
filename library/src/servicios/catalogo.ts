@@ -57,6 +57,9 @@ function validarCantidad(cantidad: number): void {
   if (!Number.isInteger(cantidad) || cantidad < 1) {
     throw new ErrorNegocio("INVALID_QUANTITY", "La cantidad debe ser mayor a cero.");
   }
+  if (cantidad > 50) {
+    throw new ErrorNegocio("INVALID_QUANTITY", "No se pueden ingresar más de 50 ejemplares por vez.");
+  }
 }
 
 const textoEjemplares = (n: number) => `${n} ${n === 1 ? "ejemplar" : "ejemplares"}`;

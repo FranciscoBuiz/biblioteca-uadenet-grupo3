@@ -13,8 +13,8 @@ import { useUsuario } from "@/lib/api/sesion";
    Pantalla 01: panel de marca a la izquierda y formulario de
    ingreso a la derecha.
 
-   Al no haber backend, la contrasena es la misma para los dos
-   perfiles y se ofrecen atajos para cargar cada cuenta.
+   Las cuentas de prueba comparten la misma contrasena y se
+   ofrecen atajos para cargar cada una.
    --------------------------------------------------------------- */
 
 export default function PaginaLogin() {
