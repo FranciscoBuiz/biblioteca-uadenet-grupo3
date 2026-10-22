@@ -110,7 +110,8 @@ export class CoreHttp implements PuertoCore {
   async debitar(userId: string, monto: number, penaltyId: string, correlationId: string) {
     const r = (await this.pedir("POST", `/internal/v1/wallets/${encodeURIComponent(userId)}/debits`, correlationId, {
       amount: monto.toFixed(2), currency: "ARS", concept: "LIBRARY_FINE", sourceModule: "library", externalReference: `penalty/${penaltyId}`,
-    })) as { operationId: string };
+    })) as { operationId?: unknown };
+    if (typeof r.operationId !== "string") throw new CoreNoDisponible("CORE respondio sin operationId");
     return { operacion: r.operationId };
   }
 

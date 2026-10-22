@@ -21,12 +21,12 @@ export const claveGateway = (clave: string): RequestHandler => {
   if (!clave) throw new Error("Falta GATEWAY_KEY: la Biblioteca no arranca sin clave de Gateway.");
   const esperada = Buffer.from(clave);
   return (req, res, next) => {
-  const recibida = Buffer.from(req.header("x-gateway-key") ?? "");
-  if (recibida.length !== esperada.length || !timingSafeEqual(recibida, esperada)) {
-    res.status(401).json({ code: "GATEWAY_REQUIRED", message: "Las solicitudes deben pasar por el Gateway." });
-    return;
-  }
-  next();
+    const recibida = Buffer.from(req.header("x-gateway-key") ?? "");
+    if (recibida.length !== esperada.length || !timingSafeEqual(recibida, esperada)) {
+      res.status(401).json({ code: "GATEWAY_REQUIRED", message: "Las solicitudes deben pasar por el Gateway." });
+      return;
+    }
+    next();
   };
 };
 

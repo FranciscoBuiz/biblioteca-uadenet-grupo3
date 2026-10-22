@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { crearRepositorioEnMemoria } from "./datos/memoria.js";
 import { hoyReal } from "./dominio/reglas.js";
 import { crearApp } from "./http/app.js";
+import { iniciarConsumidor } from "./integracion/backoffice.js";
 import { CoreHttp } from "./integracion/core.js";
 import { detectarAtrasos } from "./servicios/deteccion.js";
 
@@ -13,7 +14,6 @@ if (!serviceKey || !gatewayKey) {
   process.exit(1);
 }
 const puerto = Number(env("PORT", "4001"));
-// RABBITMQ_URL = env("RABBITMQ_URL"): se usa a partir de la Task 8.
 
 const repo = crearRepositorioEnMemoria(hoyReal()); // Task 12: MariaDB
 const core = new CoreHttp(env("CORE_URL", "http://127.0.0.1:4000"), serviceKey);
@@ -32,5 +32,6 @@ async function jobAtrasos(): Promise<void> {
 app.listen(puerto, "127.0.0.1", () => {
   console.log(`[library] escuchando en 127.0.0.1:${puerto}`);
   void jobAtrasos();
+  iniciarConsumidor(env("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5672"), repo);
   setInterval(() => void jobAtrasos(), 60 * 60 * 1000);
 });

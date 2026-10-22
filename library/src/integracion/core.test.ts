@@ -25,6 +25,7 @@ before(async () => {
   app.post("/internal/v1/wallets/:id/debits", (_req, res) => {
     if (modo === "fondos") res.status(409).json({ code: "INSUFFICIENT_FUNDS" });
     else if (modo === "5xx") res.status(503).json({ code: "X" });
+    else if (modo === "sinop") res.status(201).json({ balance: "0.00" });
     else if (modo === "idem") res.status(409).json({ code: "IDEMPOTENCY_CONFLICT" });
     else res.status(201).json({ operationId: "OP-9", balance: "0.00" });
   });
@@ -44,6 +45,12 @@ describe("CoreHttp", () => {
     assert.deepEqual(ult.body, { amount: "2500.00", currency: "ARS", concept: "LIBRARY_FINE", sourceModule: "library", externalReference: "penalty/SAN-00031" });
     assert.equal(ult.headers["x-correlation-id"], "corr-1");
     assert.equal(ult.headers["x-service-key"], CLAVE);
+  });
+
+  test("2xx sin operationId → CoreNoDisponible", async () => {
+    modo = "sinop";
+    await assert.rejects(core.debitar("u-ana", 2500, "SAN-1", "c"), CoreNoDisponible);
+    modo = "ok";
   });
 
   test("409 INSUFFICIENT_FUNDS → SaldoInsuficiente; 5xx → CoreNoDisponible", async () => {
