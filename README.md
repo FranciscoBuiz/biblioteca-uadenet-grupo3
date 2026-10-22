@@ -45,8 +45,8 @@ docker compose version
 1. **Clonar el repo y entrar a la carpeta.**
 
    ```bash
-   git clone <url-del-repo> biblioteca-uadenet
-   cd biblioteca-uadenet
+   git clone https://github.com/FranciscoBuiz/biblioteca-uadenet-grupo3.git
+   cd biblioteca-uadenet-grupo3
    ```
 
 2. **Instalar las dependencias.** Se hace una sola vez, en la raíz; npm instala
